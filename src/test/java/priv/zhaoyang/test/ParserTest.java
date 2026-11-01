@@ -81,7 +81,6 @@ public class ParserTest {
                         .putExpression(new Identifier(new Token(TokenType.IDENT, "anotherVar"), "anotherVar"))
         ));
 
-        System.out.println(program.toString());
         Assert.assertEquals(program.toString(), "let myVar = anotherVar;");
     }
 
@@ -132,6 +131,35 @@ public class ParserTest {
             /* 字面量也要断言 */
             ReturnStatement returnStatement = (ReturnStatement) statement;
             Assert.assertEquals(returnStatement.tokenLiteral(), "return");
+        }
+    }
+
+    @Test
+    public void testIdentifierExpression(){
+        String input = "foobar;";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+
+        for (Statement statement : statements) {
+
+            if (!(statement instanceof ExpressionStatement)) {
+                Assert.fail("statement is not instance of ExpressionStatement");
+            }
+            ExpressionStatement expressionStatement = (ExpressionStatement) statement;
+            Expression expression = expressionStatement.expression();
+
+            if (!(expression instanceof Identifier)) {
+                Assert.fail("statement.expression is not instance of Identifier");
+            }
+            Identifier identifier = (Identifier) expression;
+            Assert.assertEquals(identifier.tokenLiteral(), "foobar");
+            Assert.assertEquals(identifier.value(), "foobar");
         }
     }
 }

@@ -13,6 +13,10 @@ package priv.zhaoyang.monkey.parser;
    目标2: 添加最基础的错误处理机制
 
    目标3: 解析Return语句
+
+   目标4: 解析expression
+      4.1: 添加prefix和infix的词典
+      4.2: 添加标识符的解析(标识符就是expression)
  * */
 
 
@@ -21,9 +25,7 @@ import priv.zhaoyang.monkey.lexer.Lexer;
 import priv.zhaoyang.monkey.token.Token;
 import priv.zhaoyang.monkey.token.TokenType;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 
 public class Parser {
@@ -34,9 +36,21 @@ public class Parser {
     private Token next;
     private List<String> errors;
 
+    private Map<TokenType, PrefixParseFunction> prefixParseFunctionMap;
+    private Map<TokenType, InfixParseFunction> infixParseFunctionMap;
+
     public Parser(Lexer lexer){
         this.lexer = lexer;
         this.errors = new ArrayList<>();
+
+        this.prefixParseFunctionMap = new HashMap<>();
+        /* 这里负责注册 */
+
+        /* 注册标识符处理方法 */
+        this.prefixParseFunctionMap.put(TokenType.IDENT, () -> {return parseIdentifierExpression();});
+
+        this.infixParseFunctionMap = new HashMap<>();
+        /* 这里负责注册 */
 
         /* 连续执行2次moveNext, 让current和next都有指向的对象 */
         moveNext();
@@ -78,11 +92,10 @@ public class Parser {
             return parseReturnStatement();
 
         }
-
         /* 中间还有其它语句， 先不管 */
-
+        /* 当你实现了LetStatement和ReturnStatement就要继续实现了, 没有其它了, 只剩ExpressionStatement了 */
         else {
-            return null;
+            return parseExpressionStatement();
         }
     }
 
@@ -168,5 +181,78 @@ public class Parser {
         }
 
         return returnStatement;
+    }
+
+    /* 等下, 这里应该是递归下降的主流程, 那还需要前置操作, 以后再说 */
+    /* 递归下降是后话, 这里是处理所有表达式的通用方法, 会用到prefixParseFunctionMap和infixParseFunctionMap */
+    private Expression parseExpression(){
+
+        /* current肯定是expression的一部分, 所以应该先new一个Expression
+         * 但是等等, Expression是一个interface，不能new, 要先细致到是哪个具体类的实例才能new,
+         * 这就必须要查表, 也就是prefixParseFunctionMap */
+        PrefixParseFunction prefixParseFunction = prefixParseFunctionMap.get(current.type);
+
+        if (prefixParseFunction == null) {
+            return null;
+        }
+        Expression expression = prefixParseFunction.process();
+
+        return expression;
+    }
+
+
+    /* 解析表达式语句，在monkey中就是 {expression} 和 TokenType.SEMI */
+    private ExpressionStatement parseExpressionStatement(){
+
+        ExpressionStatement expressionStatement = new ExpressionStatement(current);
+
+        /* 这里实现的有问题, 既然你已经知道表达式语句就是 {expression} 和 TokenType.SEMI,
+         * 那么处理expresion应该交给parseExpression(), 这里只要moveNext()越过TokenType.SEMICOLON即可
+         *  */
+
+        /* 有问题的实现
+        if(current.type == TokenType.IDENT){
+            Identifier identifier = parseIdentifier();
+            return expressionStatement.putExpression(identifier);
+        }
+         还有别的，暂时先不管
+         else {
+            return expressionStatement;
+        }
+        */
+        expressionStatement.putExpression(parseExpression());
+
+        /* 处理SEMI */
+        /* 出错啦, 只在确实遇到分号时才消费，否则会把下一条语句的关键字吃掉。
+         * 因此不能是无条件挪动指针
+         * moveNext();
+         *
+         * 举个例子，这还是个异常场景
+         * let = 10; let foo_bar ...
+         *
+         * 由于第一句解析遇到异常, =, 10和分号都残留。current仍然指向了第一个let
+         * 初始: current=let(T0)
+         * ① parseProgram.moveNext():   current = = (T1)
+         * ② parseExprStmt.moveNext():  current = 10 (T2)      ← 帮凶第1次
+         * ③ parseProgram.moveNext():   current = ; (T3)
+         * ④ parseExprStmt.moveNext():  current = let (T4)     ← 帮凶第2次，把 current 停到第二个 let 上
+         * ⑤ parseProgram.moveNext():   current = foo_bar (T5) ← 第二个 let 在这里被吞
+         *
+         * 修复后，parseExpressionStatement 只在 next 是分号时才前进去消费它；否则原地不动，把前进交给 parseProgram，
+         * 于是残留 token 被一个接一个地推进，不会一次跳两个。
+         * 换句话说，每当解析异常，异常的每个token都被当作了一个新的statement
+         * 依靠parseProgram的moveNext一个一个的移动指针，就不会让第二个let被吞掉
+         * */
+        if (next.type == TokenType.SEMICOLON){
+            moveNext();
+        }
+
+        return expressionStatement;
+    }
+
+    /* 这个方法处理Identifier, 要注册到prefixParseFunctionMap中 */
+    private Identifier parseIdentifierExpression(){
+        Identifier identifier = new Identifier(current, current.literal);
+        return identifier;
     }
 }
