@@ -45,4 +45,8 @@ public enum TokenType {
     private TokenType(String literal){
         this.literal = literal;
     }
+
+    public String literal(){
+        return this.literal;
+    }
 }

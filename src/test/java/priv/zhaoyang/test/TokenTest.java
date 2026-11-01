@@ -150,8 +150,8 @@ public class TokenTest {
 
         for (Token expected : expectedTokens) {
             Token actual = lexer.nextToken();
-            String log = String.format("actual=[%s], expected=[%s]", actual, expected);
-            System.out.println(log);
+//            String log = String.format("actual=[%s], expected=[%s]", actual, expected);
+//            System.out.println(log);
             Assert.assertEquals(actual.literal, expected.literal);
             Assert.assertEquals(actual.type, expected.type);
         }
