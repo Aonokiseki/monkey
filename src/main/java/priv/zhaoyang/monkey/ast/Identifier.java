@@ -23,4 +23,9 @@ public class Identifier implements Expression{
     public String tokenLiteral() {
         return this.token.literal;
     }
+
+    @Override
+    public String toString(){
+        return this.value;
+    }
 }

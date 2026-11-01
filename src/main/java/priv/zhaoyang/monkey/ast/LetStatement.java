@@ -34,4 +34,23 @@ public class LetStatement implements Statement {
     public String tokenLiteral() {
         return this.token.literal;
     }
+
+    @Override
+    public String toString(){
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(token.literal).append(" ");
+
+        if (identifier != null) {
+            /* 直接写identifier, 交给底层的toString()完成即可 */
+            sb.append(identifier).append(" = ");
+        }
+        if (expression != null){
+            sb.append(expression);
+        }
+
+        sb.append(";");
+
+        return sb.toString();
+    }
 }

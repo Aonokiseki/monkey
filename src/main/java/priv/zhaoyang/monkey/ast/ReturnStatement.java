@@ -27,4 +27,19 @@ public class ReturnStatement implements Statement{
     public String tokenLiteral() {
         return token.literal;
     }
+
+    @Override
+    public String toString(){
+        StringBuilder sb = new StringBuilder();
+
+        sb.append(token.literal).append(" ");
+
+        if (returnExpression != null){
+            sb.append(returnExpression);
+        }
+
+        sb.append(";");
+
+        return sb.toString();
+    }
 }

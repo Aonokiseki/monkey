@@ -3,12 +3,11 @@ package priv.zhaoyang.test;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
-import priv.zhaoyang.monkey.ast.LetStatement;
-import priv.zhaoyang.monkey.ast.Program;
-import priv.zhaoyang.monkey.ast.ReturnStatement;
-import priv.zhaoyang.monkey.ast.Statement;
+import priv.zhaoyang.monkey.ast.*;
 import priv.zhaoyang.monkey.lexer.Lexer;
 import priv.zhaoyang.monkey.parser.Parser;
+import priv.zhaoyang.monkey.token.Token;
+import priv.zhaoyang.monkey.token.TokenType;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -69,6 +68,21 @@ public class ParserTest {
         Assert.assertEquals(errors.get(1), "expected next token to be IDENT, got = instead");
         Assert.assertEquals(errors.get(2), "expected next token to be =, got INT instead");
 
+    }
+
+    @Test
+    public void testString(){
+        Program program = new Program();
+
+        program.putStatements(Arrays.asList(
+                new LetStatement(new Token(TokenType.LET, "let"))
+                        .putIdentifier(new Identifier(new Token(TokenType.IDENT, "myVar"), "myVar"))
+                        /* identifier也是expression */
+                        .putExpression(new Identifier(new Token(TokenType.IDENT, "anotherVar"), "anotherVar"))
+        ));
+
+        System.out.println(program.toString());
+        Assert.assertEquals(program.toString(), "let myVar = anotherVar;");
     }
 
     private void testLetStatement(Statement statement, String name){
