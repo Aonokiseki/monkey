@@ -9,117 +9,64 @@ import priv.zhaoyang.monkey.parser.Parser;
 import priv.zhaoyang.monkey.token.Token;
 import priv.zhaoyang.monkey.token.TokenType;
 
-import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
 public class ParserTest {
 
-    @DataProvider(name = "testLetStatementsDataProvider")
-    public Object[][] testLetStatementsDataProvider(Method method){
+    /* ============ Let 语句 ============ */
+
+    @DataProvider(name = "letStatementsDataProvider")
+    public Object[][] letStatementsDataProvider(){
         return new Object[][]{
-                new Object[]{
-                        "let x = 5; let y = 10; let foobar = 838383;",
-                        Arrays.asList("x", "y", "foobar")
-                },
-                new Object[]{
-                        "let abc = 1; let bcd=2; let foo_bar=114514;",
-                        Arrays.asList("abc", "bcd", "foo_bar")
-                },
-                /* 838 383 是两部分, 但当下的逻辑直接忽略当作尚未解析的expression,因此这个地方要放行 */
-                new Object[]{
-                        "let aaa = 838 383;",
-                        Arrays.asList("aaa")
-                },
+                new Object[]{"let x = 5; let y = 10; let foobar = 838383;", Arrays.asList("x", "y", "foobar")},
+                new Object[]{"let abc = 1; let bcd=2; let foo_bar=114514;", Arrays.asList("abc", "bcd", "foo_bar")},
+                /* 838 383 是两部分，但当前 let 的值表达式尚未接入，因此放行 */
+                new Object[]{"let aaa = 838 383;", Arrays.asList("aaa")},
         };
     }
 
-    @Test(dataProvider = "testLetStatementsDataProvider")
-    public void testLetStatements(String input, List<String> identififerNames){
-
+    @Test(dataProvider = "letStatementsDataProvider")
+    public void testLetStatements(String input, List<String> expectedNames){
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
-
         Program program = parser.parseProgram();
         checkParserErrors(parser);
 
         List<Statement> statements = program.statements();
-        Assert.assertEquals(statements.size(), identififerNames.size());
+        Assert.assertEquals(statements.size(), expectedNames.size());
 
         for (int i = 0; i < statements.size(); i++){
             Statement statement = statements.get(i);
-            testLetStatement(statement, identififerNames.get(i));
+            Assert.assertEquals(statement.tokenLiteral(), "let");
+            Assert.assertTrue(statement instanceof LetStatement, "statement is not LetStatement");
+            Assert.assertEquals(((LetStatement) statement).identifier().tokenLiteral(), expectedNames.get(i));
         }
     }
 
     @Test
     public void testLetStatementFailure(){
-        String invalidInput = "let x 5; let = 10; let foo_bar 838 383;";
-
-        Lexer lexer = new Lexer(invalidInput);
+        String input = "let x 5; let = 10; let foo_bar 838 383;";
+        Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
-
-        Program program = parser.parseProgram();
+        parser.parseProgram();
 
         List<String> errors = parser.errors();
-        /* 真是每次加代码, 总是你过不去... 比如加上找不到prefixParseFunction时，错误就变成4个了 */
         Assert.assertEquals(errors.size(), 4);
-
         Assert.assertEquals(errors.get(0), "expected next token to be =, got INT instead");
         Assert.assertEquals(errors.get(1), "expected next token to be IDENT, got = instead");
-        /* -> 新增, 上一个=是非法的, current没移动 */
+        /* 残留的 "=" 不是合法前缀，报 no-prefix 错误 */
         Assert.assertEquals(errors.get(2), "Token is =, no suitable prefix function in function map");
         Assert.assertEquals(errors.get(3), "expected next token to be =, got INT instead");
-
     }
 
-    @Test
-    public void testString(){
-        Program program = new Program();
-
-        program.putStatements(Arrays.asList(
-                new LetStatement(new Token(TokenType.LET, "let"))
-                        .putIdentifier(new Identifier(new Token(TokenType.IDENT, "myVar"), "myVar"))
-                        /* identifier也是expression */
-                        .putExpression(new Identifier(new Token(TokenType.IDENT, "anotherVar"), "anotherVar"))
-        ));
-
-        Assert.assertEquals(program.toString(), "let myVar = anotherVar;");
-    }
-
-    private void testLetStatement(Statement statement, String name){
-        Assert.assertEquals(statement.tokenLiteral(), "let");
-
-        if (!(statement instanceof LetStatement)) {
-            Assert.fail("statement is not instanceof LetStatement.");
-        }
-
-        LetStatement letStatement = (LetStatement)statement;
-        Assert.assertEquals(letStatement.identifier().tokenLiteral(), name);
-    }
-
-    private static void checkParserErrors(Parser parser){
-        List<String> errors = parser.errors();
-
-        if (errors.isEmpty())
-            return;
-
-        StringBuilder failMessage = new StringBuilder();
-        failMessage
-                .append("parser has ").append(errors.size()).append(" errors.").append("\n");
-        for (String error : errors) {
-            failMessage.append(error).append("\n");
-        }
-        Assert.fail(failMessage.toString());
-    }
+    /* ============ Return 语句 ============ */
 
     @Test
     public void testReturnStatements(){
         String input = "return 5; return abc;";
-
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
-
         Program program = parser.parseProgram();
         checkParserErrors(parser);
 
@@ -127,124 +74,206 @@ public class ParserTest {
         Assert.assertEquals(statements.size(), 2);
 
         for (Statement statement : statements){
-
-            if (!(statement instanceof ReturnStatement)){
-                Assert.fail(String.format("statement[%s] is not ReturnStatement", statement.tokenLiteral()));
-            }
-            /* 字面量也要断言 */
-            ReturnStatement returnStatement = (ReturnStatement) statement;
-            Assert.assertEquals(returnStatement.tokenLiteral(), "return");
+            Assert.assertTrue(statement instanceof ReturnStatement, "statement is not ReturnStatement");
+            Assert.assertEquals(statement.tokenLiteral(), "return");
         }
     }
 
-    @Test
-    public void testIdentifierExpression(){
-        String input = "foobar;";
+    /* ============ 标识符表达式 ============ */
 
+    @DataProvider(name = "identifierExpressionDataProvider")
+    public Object[][] identifierExpressionDataProvider(){
+        return new Object[][]{
+                new Object[]{"foobar;", "foobar"},
+                new Object[]{"x;", "x"},
+                new Object[]{"my_var;", "my_var"},
+        };
+    }
+
+    @Test(dataProvider = "identifierExpressionDataProvider")
+    public void testIdentifierExpression(String input, String expectedValue){
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
         Program program = parser.parseProgram();
         checkParserErrors(parser);
 
-        List<Statement> statements = program.statements();
-        Assert.assertEquals(statements.size(), 1);
-
-        for (Statement statement : statements) {
-
-            if (!(statement instanceof ExpressionStatement)) {
-                Assert.fail("statement is not instance of ExpressionStatement");
-            }
-            ExpressionStatement expressionStatement = (ExpressionStatement) statement;
-            Expression expression = expressionStatement.expression();
-
-            if (!(expression instanceof Identifier)) {
-                Assert.fail("statement.expression is not instance of Identifier");
-            }
-            Identifier identifier = (Identifier) expression;
-            Assert.assertEquals(identifier.tokenLiteral(), "foobar");
-            Assert.assertEquals(identifier.value(), "foobar");
-        }
+        testIdentifier(firstExpression(program), expectedValue);
     }
 
-    @Test
-    public void testIntExpression(){
-        String input = "123; 456; 2147483649";
+    /* ============ 整数字面量 ============ */
 
+    @DataProvider(name = "integerLiteralDataProvider")
+    public Object[][] integerLiteralDataProvider(){
+        return new Object[][]{
+                new Object[]{"5;", 5L},
+                new Object[]{"10;", 10L},
+                new Object[]{"838383;", 838383L},
+                /* 超过 int 范围，验证 int64 (long) */
+                new Object[]{"2147483649;", 2147483649L},
+        };
+    }
+
+    @Test(dataProvider = "integerLiteralDataProvider")
+    public void testIntegerLiteral(String input, long expectedValue){
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
         Program program = parser.parseProgram();
         checkParserErrors(parser);
 
-        List<Statement> statements = program.statements();
-        List<Long> expectedInts = Arrays.asList(123L, 456L, 2147483649L);
-        Assert.assertEquals(statements.size(), expectedInts.size());
-
-        for (int i = 0; i < statements.size(); i++){
-            Statement statement = statements.get(i);
-
-            if (!(statement instanceof ExpressionStatement)) {
-                Assert.fail("statement is not instanceof ExpressionStatement");
-            }
-            ExpressionStatement expressionStatement = (ExpressionStatement) statement;
-            Expression expression = expressionStatement.expression();
-
-            if (!(expression instanceof IntegerLiteral)){
-                Assert.fail("expression is not instanceof IntExpression");
-            }
-            IntegerLiteral intExpression = (IntegerLiteral) expression;
-
-            long expectedValue = expectedInts.get(i).longValue();
-            Assert.assertEquals(intExpression.value(), expectedValue);
-            Assert.assertEquals(intExpression.tokenLiteral(), String.valueOf(expectedValue));
-        }
+        testIntegerLiteral(firstExpression(program), expectedValue);
     }
 
-    @Test
-    public void testPrefixExpression(){
-        String input = "-2147483649;";
+    /* ============ 前缀表达式 ============ */
 
+    @DataProvider(name = "prefixExpressionDataProvider")
+    public Object[][] prefixExpressionDataProvider(){
+        return new Object[][]{
+                new Object[]{"!5;", "!", "5"},
+                new Object[]{"-15;", "-", "15"},
+                new Object[]{"!a;", "!", "a"},
+                new Object[]{"-a;", "-", "a"},
+        };
+    }
+
+    @Test(dataProvider = "prefixExpressionDataProvider")
+    public void testPrefixExpression(String input, String operator, String rightTokenLiteral){
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
         Program program = parser.parseProgram();
         checkParserErrors(parser);
 
-        List<Statement> statements = program.statements();
-        Assert.assertEquals(statements.size(), 1);
-
-        Statement statement = statements.get(0);
-        if (!(statement instanceof ExpressionStatement)) {
-            Assert.fail("statement is not instance of ExpressionStatement");
-        }
-        ExpressionStatement expressionStatement = (ExpressionStatement) statement;
-        Expression expression = expressionStatement.expression();
-
-        if (!(expression instanceof PrefixExpression)){
-            Assert.fail("expression is not instance of PrefixExpression");
-        }
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof PrefixExpression, "expression is not PrefixExpression");
         PrefixExpression prefixExpression = (PrefixExpression) expression;
 
-        Assert.assertEquals(prefixExpression.tokenLiteral(), "-");
-        Assert.assertEquals(prefixExpression.operator(), "-");
-
-        Expression subExpression = prefixExpression.expression();
-        if(!(subExpression instanceof IntegerLiteral)) {
-            Assert.fail("subExpression is not instance of IntegerLiteral");
-        }
-        IntegerLiteral integerLiteral = (IntegerLiteral)subExpression;
-        Assert.assertEquals(integerLiteral.tokenLiteral(), "2147483649");
-        Assert.assertEquals(integerLiteral.value(), 2147483649L);
+        Assert.assertEquals(prefixExpression.operator(), operator);
+        Assert.assertEquals(prefixExpression.expression().tokenLiteral(), rightTokenLiteral);
     }
+
+    /* ============ 中缀表达式 ============ */
+
+    @DataProvider(name = "infixExpressionDataProvider")
+    public Object[][] infixExpressionDataProvider(){
+        return new Object[][]{
+                new Object[]{"5 + 5;", 5L, "+", 5L},
+                new Object[]{"5 - 5;", 5L, "-", 5L},
+                new Object[]{"5 * 5;", 5L, "*", 5L},
+                new Object[]{"5 / 5;", 5L, "/", 5L},
+                new Object[]{"5 > 5;", 5L, ">", 5L},
+                new Object[]{"5 < 5;", 5L, "<", 5L},
+                new Object[]{"5 == 5;", 5L, "==", 5L},
+                new Object[]{"5 != 5;", 5L, "!=", 5L},
+        };
+    }
+
+    @Test(dataProvider = "infixExpressionDataProvider")
+    public void testInfixExpression(String input, long leftValue, String operator, long rightValue){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof InfixExpression, "expression is not InfixExpression");
+        InfixExpression infixExpression = (InfixExpression) expression;
+
+        testIntegerLiteral(infixExpression.left(), leftValue);
+        Assert.assertEquals(infixExpression.operator(), operator);
+        testIntegerLiteral(infixExpression.right(), rightValue);
+    }
+
+    /* ============ 运算符优先级 ============ */
+
+    @DataProvider(name = "operatorPrecedenceDataProvider")
+    public Object[][] operatorPrecedenceDataProvider(){
+        return new Object[][]{
+                new Object[]{"-a * b", "((-a) * b)"},
+                new Object[]{"!-a", "(!(-a))"},
+                new Object[]{"a + b + c", "((a + b) + c)"},
+                new Object[]{"a + b - c", "((a + b) - c)"},
+                new Object[]{"a * b * c", "((a * b) * c)"},
+                new Object[]{"a * b / c", "((a * b) / c)"},
+                new Object[]{"a + b / c", "(a + (b / c))"},
+                new Object[]{"a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"},
+                new Object[]{"3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"},
+                new Object[]{"5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"},
+                new Object[]{"5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"},
+                new Object[]{"3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+        };
+    }
+
+    @Test(dataProvider = "operatorPrecedenceDataProvider")
+    public void testOperatorPrecedence(String input, String expected){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        Assert.assertEquals(program.toString(), expected);
+    }
+
+    /* ============ 错误用例 ============ */
 
     @Test
     public void testPrefixExpressionFailure(){
         String input = "> 1;";
-
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
-        Program program = parser.parseProgram();
+        parser.parseProgram();
 
         List<String> errors = parser.errors();
         Assert.assertEquals(errors.size(), 1);
         Assert.assertEquals(errors.get(0), "Token is >, no suitable prefix function in function map");
+    }
+
+    /* ============ String 打印 ============ */
+
+    @Test
+    public void testString(){
+        Program program = new Program();
+        program.putStatements(Arrays.asList(
+                new LetStatement(new Token(TokenType.LET, "let"))
+                        .putIdentifier(new Identifier(new Token(TokenType.IDENT, "myVar"), "myVar"))
+                        /* identifier 也是 expression */
+                        .putExpression(new Identifier(new Token(TokenType.IDENT, "anotherVar"), "anotherVar"))
+        ));
+        Assert.assertEquals(program.toString(), "let myVar = anotherVar;");
+    }
+
+    /* ============ 辅助方法 ============ */
+
+    private Expression firstExpression(Program program){
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+        Statement statement = statements.get(0);
+        Assert.assertTrue(statement instanceof ExpressionStatement, "statement is not ExpressionStatement");
+        return ((ExpressionStatement) statement).expression();
+    }
+
+    private void testIdentifier(Expression expression, String value){
+        Assert.assertTrue(expression instanceof Identifier, "expression is not Identifier");
+        Identifier identifier = (Identifier) expression;
+        Assert.assertEquals(identifier.value(), value);
+        Assert.assertEquals(identifier.tokenLiteral(), value);
+    }
+
+    private void testIntegerLiteral(Expression expression, long value){
+        Assert.assertTrue(expression instanceof IntegerLiteral, "expression is not IntegerLiteral");
+        IntegerLiteral integerLiteral = (IntegerLiteral) expression;
+        Assert.assertEquals(integerLiteral.value(), value);
+        Assert.assertEquals(integerLiteral.tokenLiteral(), String.valueOf(value));
+    }
+
+    private static void checkParserErrors(Parser parser){
+        List<String> errors = parser.errors();
+        if (errors.isEmpty())
+            return;
+
+        StringBuilder failMessage = new StringBuilder();
+        failMessage.append("parser has ").append(errors.size()).append(" errors.").append(" ");
+        for (String error : errors) {
+            failMessage.append(error).append(" ");
+        }
+        Assert.fail(failMessage.toString());
     }
 }

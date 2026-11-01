@@ -19,6 +19,7 @@ package priv.zhaoyang.monkey.parser;
       4.2: 添加标识符的解析(标识符就是expression)
       4.3: 添加数字字面量的解析
       4.4: 添加前缀表达式的解析, 如 -5
+      4.5: 中缀表达式 如 5 + 5
  * */
 
 
@@ -46,17 +47,23 @@ public class Parser {
         this.errors = new ArrayList<>();
 
         this.prefixParseFunctionMap = new HashMap<>();
-        /* 这里负责注册 */
-
-        /* 注册标识符处理方法 */
-        this.prefixParseFunctionMap.put(TokenType.IDENT, () -> {return parseIdentifierExpression();});
-        /* 注册数字字面量方法 */
-        this.prefixParseFunctionMap.put(TokenType.INT, () -> {return parseIntegerLiteral();});
-        /* 处理前缀方法, 除了-, 还有<, >, *, + */
-        this.prefixParseFunctionMap.put(TokenType.MINUS, () -> {return parsePrefixExpression();});
-
         this.infixParseFunctionMap = new HashMap<>();
-        /* 这里负责注册 */
+
+        /* 前缀注册 */
+        registerPrefix(TokenType.IDENT, this::parseIdentifierExpression);
+        registerPrefix(TokenType.INT, this::parseIntegerLiteral);
+        registerPrefix(TokenType.MINUS, this::parsePrefixExpression);
+        registerPrefix(TokenType.BANG, this::parsePrefixExpression);
+
+        /* 中缀注册 */
+        registerInfix(TokenType.PLUS, this::parseInfixExpression);
+        registerInfix(TokenType.MINUS, this::parseInfixExpression);
+        registerInfix(TokenType.SLASH, this::parseInfixExpression);
+        registerInfix(TokenType.ASTERISK, this::parseInfixExpression);
+        registerInfix(TokenType.EQ, this::parseInfixExpression);
+        registerInfix(TokenType.NOT_EQ, this::parseInfixExpression);
+        registerInfix(TokenType.LT, this::parseInfixExpression);
+        registerInfix(TokenType.GT, this::parseInfixExpression);
 
         /* 连续执行2次moveNext, 让current和next都有指向的对象 */
         moveNext();
@@ -66,6 +73,14 @@ public class Parser {
     private void moveNext(){
         current = next;
         next = lexer.nextToken();
+    }
+
+    private void registerPrefix(TokenType type, PrefixParseFunction fn){
+        prefixParseFunctionMap.put(type, fn);
+    }
+
+    private void registerInfix(TokenType type, InfixParseFunction fn){
+        infixParseFunctionMap.put(type, fn);
     }
 
     public Program parseProgram(){
@@ -191,7 +206,7 @@ public class Parser {
 
     /* 等下, 这里应该是递归下降的主流程, 那还需要前置操作, 以后再说 */
     /* 递归下降是后话, 这里是处理所有表达式的通用方法, 会用到prefixParseFunctionMap和infixParseFunctionMap */
-    private Expression parseExpression(){
+    private Expression parseExpression(Precedence parentPrecedence){
 
         /* current肯定是expression的一部分, 所以应该先new一个Expression
          * 但是等等, Expression是一个interface，不能new, 要先细致到是哪个具体类的实例才能new,
@@ -203,6 +218,36 @@ public class Parser {
             return null;
         }
         Expression expression = prefixParseFunction.process();
+
+        /* 思考回路: 就是这里了，递归下降的核心逻辑, 应该是for循环判断operator的优先级
+         * 之所以要这样, 是因为要考虑 5 + 2 * 3 这种右边粘性更强的可能
+         * 偶然想起来acwj这里针对token准备了一个map, monkey怎么做的忘了, 不过可以先试试
+         * 字典构造完了，现在的问题是谁和谁比，肯定有一个是current，另外一个应该由外部传入, 改下形参
+         * 那应该是这样的: 只要current的优先级比parent的优先级高，也就是粘性更强, 那就一直优先右结合 */
+
+        /* 易错点1: 应该是使用next来判断优先级, 举个例子:
+         * 解析 1 + 2; 在解析1时, current就指向了1, next 指向了 '+', 如果用current比较, 直接取最低优先, 不进入循环,
+         * 后方的 +2 成为新的表达式 */
+        /* 易错点2: 要用 SEMICOLON 判断是否结束语句 */
+
+        /* 暗坑: 循环外计算优先级, 容易导致 1 + 2 * 3 这种表达式会计算错误, 要改为在循环中计算 */
+        while(next.type != TokenType.SEMICOLON &&
+                PrecedenceMap.get(next.type).value() > parentPrecedence.value()){
+            /* 思考回路: 现在该用到中缀表达式词典了 */
+            /* 易错点4: 这里也不能忘了用 运算符查找(也就是next指向的token) 中缀函数 */
+            InfixParseFunction infixParseFunction = infixParseFunctionMap.get(next.type);
+
+            /* 易错点4: 假如没有对应的中缀表达式, 应该返回已经解析完成的部分,而不是null */
+            if (infixParseFunction == null){
+                return expression;
+            }
+            /* 易错点5: 解析完了infixParseFunction, 要moveNext() */
+            moveNext();
+
+            /* 思考: 欸欸欸, 我是不是自己写出来了! */
+            /* 嘿嘿, 把返回值忘了 */
+            expression = infixParseFunction.process(expression);
+        }
 
         return expression;
     }
@@ -227,7 +272,7 @@ public class Parser {
             return expressionStatement;
         }
         */
-        expressionStatement.putExpression(parseExpression());
+        expressionStatement.putExpression(parseExpression(Precedence.LOWEST));
 
         /* 处理SEMI */
         /* 出错啦, 只在确实遇到分号时才消费，否则会把下一条语句的关键字吃掉。
@@ -285,7 +330,8 @@ public class Parser {
         prefixExpression.putOperator(current.literal);
         moveNext();
 
-        Expression expression = parseExpression();
+        /* 易错点: 这是前缀右操作数, 必须PREFIX */
+        Expression expression = parseExpression(Precedence.PREFIX);
         prefixExpression.putExpression(expression);
 
         return prefixExpression;
@@ -297,4 +343,36 @@ public class Parser {
                 "Token is %s, no suitable prefix function in function map", current.literal);
         errors.add(noPrefixFunctionError);
     }
+
+    private void noInfixParserFnError(){
+        String noInfixFunctionError = String.format(
+                "Token is %s, no suitable infix function in function map", current.literal);
+        errors.add(noInfixFunctionError);
+    }
+
+    private InfixExpression parseInfixExpression(Expression left){
+        /* 思考逻辑: 能进到这个分支，说明之前已经读入了一个expression了，当前的current应该是operator
+         * operator的后边还是要按照expression解析
+         * 照例应该new一个InfixExpression */
+        InfixExpression infixExpression = new InfixExpression(current);
+
+        /* 欸等下, 那left得从外部传过来, 因此要修改函数形参 */
+        infixExpression.putLeftExpression(left);
+        /* 易错点: 手工设置operator */
+        infixExpression.putOperator(current.literal);
+        /* 易错点2: 手工记录当前operator的优先级 */
+        Precedence operatorPrecedence = PrecedenceMap.get(current.type);
+
+        /* 移动指针 */
+        moveNext();
+
+        /* 右侧应该又要按照expression来解析, 别忘了这里要使用当前operator的优先级 */
+        Expression right = parseExpression(operatorPrecedence);
+        if (right != null) {
+            infixExpression.putRightExpression(right);
+        }
+        return infixExpression;
+    }
+
+
 }
