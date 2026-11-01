@@ -11,13 +11,12 @@ package priv.zhaoyang.monkey.parser;
    要能识别出三个语句, 三个标识符x, y, add
 
    目标2: 添加最基础的错误处理机制
+
+   目标3: 解析Return语句
  * */
 
 
-import priv.zhaoyang.monkey.ast.Identifier;
-import priv.zhaoyang.monkey.ast.LetStatement;
-import priv.zhaoyang.monkey.ast.Program;
-import priv.zhaoyang.monkey.ast.Statement;
+import priv.zhaoyang.monkey.ast.*;
 import priv.zhaoyang.monkey.lexer.Lexer;
 import priv.zhaoyang.monkey.token.Token;
 import priv.zhaoyang.monkey.token.TokenType;
@@ -68,10 +67,16 @@ public class Parser {
         return program;
     }
 
-    public Statement parseStatement(){
+    private Statement parseStatement(){
 
         if(current.type.equals(TokenType.LET)){
+
             return parseLetStatement();
+
+        } else if (current.type.equals(TokenType.RETURN)){
+
+            return parseReturnStatement();
+
         }
 
         /* 中间还有其它语句， 先不管 */
@@ -81,7 +86,7 @@ public class Parser {
         }
     }
 
-    public LetStatement parseLetStatement(){
+    private LetStatement parseLetStatement(){
         /* 先判断token是不是let
          * 错误的，原书不是校验是不是let, let的校验已经由外部parseStatement完成了, 这里应该校验这里是不是identifier
          * 不过冗余校验就冗余吧 */
@@ -105,6 +110,7 @@ public class Parser {
         if(next.type != TokenType.EOF && next.type != TokenType.ASSIGN) {
             moveNext();
         }
+         * 但故意放到这里, 你看下重新实现时是不是又犯了同一个错误
          */
 
         /* 遇到Token.ASSIGN, 挪动指针 */
@@ -114,7 +120,7 @@ public class Parser {
         }
 
         /* 后边直至;，都是一个expression，至于expression怎么解析，先不管，假设有个上帝函数帮我们解析完成了 */
-        /* 原书中这里是 current 指向的token来判断的, 先打个标 FLAG, 以后遇到问题搜索关键字
+        /* 原书中这里是 current 指向的token来判断的
          * 要改成current.type != TokenType.SEMICOLON, 可以避免模糊的边界: next是半角分号如何处理 */
         while(current.type != TokenType.EOF && current.type != TokenType.SEMICOLON){
             /* 中间的处理以后再说 */
@@ -142,5 +148,25 @@ public class Parser {
         }
         peekError(tokenType);
         return false;
+    }
+
+    private ReturnStatement parseReturnStatement(){
+        /* return {expression}; */
+        /* 这次长教训, 外部已经校验了return关键字, 这里不校验 */
+        /* 也不存在identifier, 也没有assign */
+        ReturnStatement returnStatement = new ReturnStatement(current);
+
+        /* 这里又遗漏了moveNext() */
+        /* LetStatement是通过校验next.type==IDENT顺便移动了位置
+         * return 后无 identifier/assign 可校验，expectPeek 没有机会帮忙前进，
+         * 所以必须显式 moveNext() 越过 return 本身，否则 while 会从 return 开始跳 */
+        moveNext();
+
+        /* 同样不管expression 的处理 */
+        while (current.type != TokenType.EOF && current.type != TokenType.SEMICOLON){
+            moveNext();
+        }
+
+        return returnStatement;
     }
 }

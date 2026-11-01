@@ -5,13 +5,13 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import priv.zhaoyang.monkey.ast.LetStatement;
 import priv.zhaoyang.monkey.ast.Program;
+import priv.zhaoyang.monkey.ast.ReturnStatement;
 import priv.zhaoyang.monkey.ast.Statement;
 import priv.zhaoyang.monkey.lexer.Lexer;
 import priv.zhaoyang.monkey.parser.Parser;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 public class ParserTest {
@@ -32,11 +32,6 @@ public class ParserTest {
                         "let aaa = 838 383;",
                         Arrays.asList("aaa")
                 },
-                /* 故意失败的用例 */
-                new Object[]{
-                        "let x 5; let = 10; let foo_bar 838 383;",
-                        Collections.emptyList()
-                }
         };
     }
 
@@ -56,6 +51,24 @@ public class ParserTest {
             Statement statement = statements.get(i);
             testLetStatement(statement, identififerNames.get(i));
         }
+    }
+
+    @Test
+    public void testLetStatementFailure(){
+        String invalidInput = "let x 5; let = 10; let foo_bar 838 383;";
+
+        Lexer lexer = new Lexer(invalidInput);
+        Parser parser = new Parser(lexer);
+
+        Program program = parser.parseProgram();
+
+        List<String> errors = parser.errors();
+        Assert.assertEquals(errors.size(), 3);
+
+        Assert.assertEquals(errors.get(0), "expected next token to be =, got INT instead");
+        Assert.assertEquals(errors.get(1), "expected next token to be IDENT, got = instead");
+        Assert.assertEquals(errors.get(2), "expected next token to be =, got INT instead");
+
     }
 
     private void testLetStatement(Statement statement, String name){
@@ -82,5 +95,29 @@ public class ParserTest {
             failMessage.append(error).append("\n");
         }
         Assert.fail(failMessage.toString());
+    }
+
+    @Test
+    public void testReturnStatements(){
+        String input = "return 5; return abc;";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 2);
+
+        for (Statement statement : statements){
+
+            if (!(statement instanceof ReturnStatement)){
+                Assert.fail(String.format("statement[%s] is not ReturnStatement", statement.tokenLiteral()));
+            }
+            /* 字面量也要断言 */
+            ReturnStatement returnStatement = (ReturnStatement) statement;
+            Assert.assertEquals(returnStatement.tokenLiteral(), "return");
+        }
     }
 }
