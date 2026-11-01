@@ -52,6 +52,8 @@ public class Parser {
         this.prefixParseFunctionMap.put(TokenType.IDENT, () -> {return parseIdentifierExpression();});
         /* 注册数字字面量方法 */
         this.prefixParseFunctionMap.put(TokenType.INT, () -> {return parseIntegerLiteral();});
+        /* 处理前缀方法, 除了-, 还有<, >, *, + */
+        this.prefixParseFunctionMap.put(TokenType.MINUS, () -> {return parsePrefixExpression();});
 
         this.infixParseFunctionMap = new HashMap<>();
         /* 这里负责注册 */
@@ -197,6 +199,7 @@ public class Parser {
         PrefixParseFunction prefixParseFunction = prefixParseFunctionMap.get(current.type);
 
         if (prefixParseFunction == null) {
+            noPrefixParseFnError();
             return null;
         }
         Expression expression = prefixParseFunction.process();
@@ -266,5 +269,32 @@ public class Parser {
         IntegerLiteral integerLiteral = new IntegerLiteral(current);
         long value = Long.parseLong(current.literal);
         return integerLiteral.putValue(value);
+    }
+
+    /* 处理前缀表达式, 注册到prefixParseFunctionMap */
+    private PrefixExpression parsePrefixExpression(){
+        /* 假设这个表达式是-5, 第一个符号是MINUS, 第二个是expression */
+        PrefixExpression prefixExpression = new PrefixExpression(current);
+
+        /* 但如果下一个字符不是expression呢? 比如 - + 5, 这里应该断言再移动,
+         * 不对不对, 既然后边也是个expression, 那应该交给parseExpression 处理
+         * 是不是漏了指针后移, 现在还是operator
+         *
+         * ↑能在看书前想到, 是个值得欣慰的结果
+         */
+        prefixExpression.putOperator(current.literal);
+        moveNext();
+
+        Expression expression = parseExpression();
+        prefixExpression.putExpression(expression);
+
+        return prefixExpression;
+    }
+
+    /* 漏了错误处理, 应该考虑查表查不到的情况 */
+    private void noPrefixParseFnError(){
+        String noPrefixFunctionError = String.format(
+                "Token is %s, no suitable prefix function in function map", current.literal);
+        errors.add(noPrefixFunctionError);
     }
 }

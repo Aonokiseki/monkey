@@ -62,11 +62,14 @@ public class ParserTest {
         Program program = parser.parseProgram();
 
         List<String> errors = parser.errors();
-        Assert.assertEquals(errors.size(), 3);
+        /* 真是每次加代码, 总是你过不去... 比如加上找不到prefixParseFunction时，错误就变成4个了 */
+        Assert.assertEquals(errors.size(), 4);
 
         Assert.assertEquals(errors.get(0), "expected next token to be =, got INT instead");
         Assert.assertEquals(errors.get(1), "expected next token to be IDENT, got = instead");
-        Assert.assertEquals(errors.get(2), "expected next token to be =, got INT instead");
+        /* -> 新增, 上一个=是非法的, current没移动 */
+        Assert.assertEquals(errors.get(2), "Token is =, no suitable prefix function in function map");
+        Assert.assertEquals(errors.get(3), "expected next token to be =, got INT instead");
 
     }
 
@@ -194,6 +197,54 @@ public class ParserTest {
             Assert.assertEquals(intExpression.value(), expectedValue);
             Assert.assertEquals(intExpression.tokenLiteral(), String.valueOf(expectedValue));
         }
+    }
 
+    @Test
+    public void testPrefixExpression(){
+        String input = "-2147483649;";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+
+        Statement statement = statements.get(0);
+        if (!(statement instanceof ExpressionStatement)) {
+            Assert.fail("statement is not instance of ExpressionStatement");
+        }
+        ExpressionStatement expressionStatement = (ExpressionStatement) statement;
+        Expression expression = expressionStatement.expression();
+
+        if (!(expression instanceof PrefixExpression)){
+            Assert.fail("expression is not instance of PrefixExpression");
+        }
+        PrefixExpression prefixExpression = (PrefixExpression) expression;
+
+        Assert.assertEquals(prefixExpression.tokenLiteral(), "-");
+        Assert.assertEquals(prefixExpression.operator(), "-");
+
+        Expression subExpression = prefixExpression.expression();
+        if(!(subExpression instanceof IntegerLiteral)) {
+            Assert.fail("subExpression is not instance of IntegerLiteral");
+        }
+        IntegerLiteral integerLiteral = (IntegerLiteral)subExpression;
+        Assert.assertEquals(integerLiteral.tokenLiteral(), "2147483649");
+        Assert.assertEquals(integerLiteral.value(), 2147483649L);
+    }
+
+    @Test
+    public void testPrefixExpressionFailure(){
+        String input = "> 1;";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+
+        List<String> errors = parser.errors();
+        Assert.assertEquals(errors.size(), 1);
+        Assert.assertEquals(errors.get(0), "Token is >, no suitable prefix function in function map");
     }
 }
