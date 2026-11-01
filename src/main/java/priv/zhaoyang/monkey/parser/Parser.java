@@ -17,6 +17,8 @@ package priv.zhaoyang.monkey.parser;
    目标4: 解析expression
       4.1: 添加prefix和infix的词典
       4.2: 添加标识符的解析(标识符就是expression)
+      4.3: 添加数字字面量的解析
+      4.4: 添加前缀表达式的解析, 如 -5
  * */
 
 
@@ -48,6 +50,8 @@ public class Parser {
 
         /* 注册标识符处理方法 */
         this.prefixParseFunctionMap.put(TokenType.IDENT, () -> {return parseIdentifierExpression();});
+        /* 注册数字字面量方法 */
+        this.prefixParseFunctionMap.put(TokenType.INT, () -> {return parseIntegerLiteral();});
 
         this.infixParseFunctionMap = new HashMap<>();
         /* 这里负责注册 */
@@ -254,5 +258,13 @@ public class Parser {
     private Identifier parseIdentifierExpression(){
         Identifier identifier = new Identifier(current, current.literal);
         return identifier;
+    }
+
+    /* 处理数字字面量，注册到prefixParseFunctionMap */
+    /* 原书用的是int64, 那这里也就使用long */
+    private IntegerLiteral parseIntegerLiteral(){
+        IntegerLiteral integerLiteral = new IntegerLiteral(current);
+        long value = Long.parseLong(current.literal);
+        return integerLiteral.putValue(value);
     }
 }

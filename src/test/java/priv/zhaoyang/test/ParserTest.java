@@ -162,4 +162,38 @@ public class ParserTest {
             Assert.assertEquals(identifier.value(), "foobar");
         }
     }
+
+    @Test
+    public void testIntExpression(){
+        String input = "123; 456; 2147483649";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        List<Long> expectedInts = Arrays.asList(123L, 456L, 2147483649L);
+        Assert.assertEquals(statements.size(), expectedInts.size());
+
+        for (int i = 0; i < statements.size(); i++){
+            Statement statement = statements.get(i);
+
+            if (!(statement instanceof ExpressionStatement)) {
+                Assert.fail("statement is not instanceof ExpressionStatement");
+            }
+            ExpressionStatement expressionStatement = (ExpressionStatement) statement;
+            Expression expression = expressionStatement.expression();
+
+            if (!(expression instanceof IntegerLiteral)){
+                Assert.fail("expression is not instanceof IntExpression");
+            }
+            IntegerLiteral intExpression = (IntegerLiteral) expression;
+
+            long expectedValue = expectedInts.get(i).longValue();
+            Assert.assertEquals(intExpression.value(), expectedValue);
+            Assert.assertEquals(intExpression.tokenLiteral(), String.valueOf(expectedValue));
+        }
+
+    }
 }
