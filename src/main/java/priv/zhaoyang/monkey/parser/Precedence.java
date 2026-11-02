@@ -20,4 +20,9 @@ public enum Precedence {
     public int value(){
         return value;
     }
+
+    @Override
+    public String toString(){
+        return this.name();
+    }
 }

@@ -20,6 +20,10 @@ package priv.zhaoyang.monkey.parser;
       4.3: 添加数字字面量的解析
       4.4: 添加前缀表达式的解析, 如 -5
       4.5: 中缀表达式 如 5 + 5
+      4.6: 实现普拉特递归下降
+      4.7: 实现布尔字面量
+      4.8: 实现分组表达式
+      4.9: if表达式
  * */
 
 
@@ -54,6 +58,10 @@ public class Parser {
         registerPrefix(TokenType.INT, this::parseIntegerLiteral);
         registerPrefix(TokenType.MINUS, this::parsePrefixExpression);
         registerPrefix(TokenType.BANG, this::parsePrefixExpression);
+        registerPrefix(TokenType.TRUE, this::parseBooleanLiteral);
+        registerPrefix(TokenType.FALSE, this::parseBooleanLiteral);
+        registerPrefix(TokenType.LPAREN, this::parseGroupExpression);
+        registerPrefix(TokenType.IF, this::parseIfExpression);
 
         /* 中缀注册 */
         registerInfix(TokenType.PLUS, this::parseInfixExpression);
@@ -89,6 +97,8 @@ public class Parser {
         List<Statement> statements = new ArrayList<>();
         while(current.type != TokenType.EOF){
 
+            /* 思考: 现在加入了BlockStatement了, 就不能直接parseStatement(), 是不是需要套一层?
+             * 不不不, 先不要, 我这里需要BlockStatement是因为我遇到了IfExpression */
             Statement statement = parseStatement();
             if (statement != null) {
                 statements.add(statement);
@@ -344,12 +354,6 @@ public class Parser {
         errors.add(noPrefixFunctionError);
     }
 
-    private void noInfixParserFnError(){
-        String noInfixFunctionError = String.format(
-                "Token is %s, no suitable infix function in function map", current.literal);
-        errors.add(noInfixFunctionError);
-    }
-
     private InfixExpression parseInfixExpression(Expression left){
         /* 思考逻辑: 能进到这个分支，说明之前已经读入了一个expression了，当前的current应该是operator
          * operator的后边还是要按照expression解析
@@ -371,8 +375,114 @@ public class Parser {
         if (right != null) {
             infixExpression.putRightExpression(right);
         }
+
         return infixExpression;
     }
 
+    /* 解析布尔表达式 */
+    /* 和原书的实现类似但有不同, 利用java enum的特性, 直接将BooleanLiteral做成枚举, 同时实现Expression接口 */
+    private BooleanLiteral parseBooleanLiteral(){
+        return Boolean.parseBoolean(current.literal) ? BooleanLiteral.TRUE : BooleanLiteral.FALSE;
+    }
+
+    /* 解析分组表达式, 就是左右括号包裹着expression */
+    private Expression parseGroupExpression(){
+        /* 左括号, 移动到下一位 */
+        moveNext();
+        /* 解析表达式 */
+        Expression expression = parseExpression(Precedence.LOWEST);
+        /* 这里应该是右括号了, 等等等, 这里还得expectPeek探测一下, 不然又重蹈覆辙了 */
+        if(!expectPeek(TokenType.RPAREN)){
+            return null;
+        }
+        return expression;
+    }
+
+    /* 解析条件表达式: if (condition) { ... } else { ... } */
+    /* 思想转变记录（关于"如何校验一个 token 并前进"）：
+     * ① 最初写的是 moveNext(); if (current != X) return null; —— 先移动、后断言，最贴近直觉、好追踪指针。
+     * ② 后来意识到：先移动后断言，校验失败时指针已经动过了；改成"先断言 next、再 moveNext"，
+     *    失败时指针原地不动。
+     * ③ 再后来发现：if (next != X) return null 是静默失败，丢了错误信息；补上 peekError(X)。
+     * ④ 最后恍然大悟：if (next != X) { peekError(X); return null; } moveNext(); 正是 expectPeek 的展开。
+     *    —— 所以下面这段"手写展开"其实等价于直接调 expectPeek。 */
+    private IfExpression parseIfExpression(){
+        /* current=IF, 先 new 一个 IfExpression */
+        IfExpression ifExpression = new IfExpression(current);
+
+        /* 校验并前进：IF → 左括号 → 条件表达式开头 */
+        if (next.type != TokenType.LPAREN){
+            peekError(TokenType.LPAREN);
+            return null;
+        }
+        moveNext();
+        moveNext();
+
+        ifExpression.putCondition(parseExpression(Precedence.LOWEST));
+
+        /* 校验并前进到右括号 */
+        if (next.type != TokenType.RPAREN){
+            peekError(TokenType.RPAREN);
+            return null;
+        }
+        moveNext();
+
+        /* 校验并前进到左大括号 */
+        if (next.type != TokenType.LBRACE){
+            peekError(TokenType.LBRACE);
+            return null;
+        }
+        moveNext();
+
+        ifExpression.putConsequence(parseBlockStatement());
+
+        /* 【连锁调整】修复 parseBlockStatement 后它停在右大括号（current==RBRACE），
+         * 所以这里直接 moveNext() 越过右大括号即可。 */
+        moveNext();
+
+        /* 此时要么是 ELSE，要么该结束了 */
+        if (current.type == TokenType.ELSE){
+            moveNext();  // current=else 的左大括号
+
+            ifExpression.putAlternative(parseBlockStatement());
+
+            /* 修复后 parseBlockStatement 已停在右大括号，直接越过 */
+            moveNext();
+        }
+
+        return ifExpression;
+    }
+
+    private BlockStatement parseBlockStatement(){
+        BlockStatement blockStatement = new BlockStatement(current);
+        /* 跳过大括号 */
+        moveNext();
+
+        List<Statement> statements = new ArrayList<>();
+        /* 【bug 记录·位置】原来的循环条件是 current.type != TokenType.SEMICOLON：
+         *   - 块是用 {} 包围的、不是 ; 结尾，所以这里应该用 RBRACE。
+         *   - 后果1（死循环）: if (x < y) { x } 这种块内最后一条语句没有分号时，
+         *     current 永远到不了 SEMICOLON，死循环。
+         *   - 后果2（截断）: if (x < y) { x; y; } 这种多条语句时，第一条语句解析完
+         *     current 停在 ;，循环立即退出，后面的 y 被丢弃。
+         *   - 当时没暴露，是因为测试只写了 if (2 > 1) { true; } else { false; }
+         *     （单条语句 + 有分号），parseExpressionStatement 内部恰好把 current 推到 ;，
+         *     让"错误的条件"碰巧退出了循环。
+         * 修复：条件改成 RBRACE。 */
+        while(current.type != TokenType.RBRACE && current.type != TokenType.EOF){
+            Statement statement = parseStatement();
+
+            if (statement != null){
+                statements.add(statement);
+            }
+            /* 【bug 记录·缺少的语句】原来循环体里漏了这一行 moveNext()：
+             *   - 缺少它，current 不前进，即使条件正确也会死循环。
+             * 修复：每解析完一条语句前进一次。 */
+            moveNext();
+        }
+        blockStatement.putStatements(statements);
+
+        return blockStatement;
+    }
 
 }

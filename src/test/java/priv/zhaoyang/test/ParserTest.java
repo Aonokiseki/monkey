@@ -9,6 +9,7 @@ import priv.zhaoyang.monkey.parser.Parser;
 import priv.zhaoyang.monkey.token.Token;
 import priv.zhaoyang.monkey.token.TokenType;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
@@ -132,6 +133,8 @@ public class ParserTest {
                 new Object[]{"-15;", "-", "15"},
                 new Object[]{"!a;", "!", "a"},
                 new Object[]{"-a;", "-", "a"},
+                new Object[]{"!true;", "!", "true"},
+                new Object[]{"!false;", "!", "false"},
         };
     }
 
@@ -182,6 +185,32 @@ public class ParserTest {
         testIntegerLiteral(infixExpression.right(), rightValue);
     }
 
+    @DataProvider(name = "testInfixExpression2DataProvider")
+    public Object[][] testInfixExpression2DataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"true != false", true, "!=", false},
+                new Object[]{"true == true", true, "==", true},
+                new Object[]{"true > false", true, ">", false},
+        };
+    }
+
+    @Test(dataProvider = "testInfixExpression2DataProvider")
+    public void testInfixExpression2(String input, boolean leftValue, String operator, boolean rightValue){
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof InfixExpression, "expression is not InfixExpression");
+        InfixExpression infixExpression = (InfixExpression) expression;
+
+        testBooleanLiteral(infixExpression.left(), leftValue);
+        Assert.assertEquals(infixExpression.operator(), operator);
+        testBooleanLiteral(infixExpression.right(), rightValue);
+    }
+
     /* ============ 运算符优先级 ============ */
 
     @DataProvider(name = "operatorPrecedenceDataProvider")
@@ -199,6 +228,17 @@ public class ParserTest {
                 new Object[]{"5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"},
                 new Object[]{"5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"},
                 new Object[]{"3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"},
+                new Object[]{"2 > 1 == true", "((2 > 1) == true)"},
+                new Object[]{"2 < 1 == false", "((2 < 1) == false)"},
+                new Object[]{"((1 + 2) * 3) + 4", "(((1 + 2) * 3) + 4)"},
+                new Object[]{"(1 + 3) * (4 / 2)", "((1 + 3) * (4 / 2))"},
+                new Object[]{"3 > 5 == false", "((3 > 5) == false)"},
+                new Object[]{"3 < 5 == true", "((3 < 5) == true)"},
+                new Object[]{"1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"},
+                new Object[]{"(5 + 5) * 2", "((5 + 5) * 2)"},
+                new Object[]{"2 / (5 + 5)", "(2 / (5 + 5))"},
+                new Object[]{"-(5 + 5)", "(-(5 + 5))"},
+                new Object[]{"!(true == true)", "(!(true == true))"},
         };
     }
 
@@ -264,6 +304,12 @@ public class ParserTest {
         Assert.assertEquals(integerLiteral.tokenLiteral(), String.valueOf(value));
     }
 
+    private void testBooleanLiteral(Expression expression, boolean value){
+        Assert.assertTrue(expression instanceof BooleanLiteral, "expression is not BooleanLiteral");
+        BooleanLiteral booleanLiteral = (BooleanLiteral) expression;
+        Assert.assertEquals(booleanLiteral.value(), value);
+    }
+
     private static void checkParserErrors(Parser parser){
         List<String> errors = parser.errors();
         if (errors.isEmpty())
@@ -275,5 +321,160 @@ public class ParserTest {
             failMessage.append(error).append(" ");
         }
         Assert.fail(failMessage.toString());
+    }
+
+    @Test
+    public void testBooleanLiteral(){
+        String input = "true; false;";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 2);
+
+        List<BooleanLiteral> expectation = Arrays.asList(BooleanLiteral.TRUE, BooleanLiteral.FALSE);
+        for(int i = 0; i < statements.size(); i++){
+            Statement statement = statements.get(i);
+
+            if (!(statement instanceof ExpressionStatement)){
+                Assert.fail("statement is not instance of ExpressionStatement");
+            }
+            ExpressionStatement expressionStatement = (ExpressionStatement) statement;
+            Expression expression = expressionStatement.expression();
+
+            if (!(expression instanceof BooleanLiteral)){
+                Assert.fail("expression is not instance of BooleanLiteral");
+            }
+            BooleanLiteral booleanLiteral = (BooleanLiteral) expression;
+            Assert.assertEquals(booleanLiteral, expectation.get(i));
+        }
+    }
+
+    @Test
+    public void testIfExpression(){
+        String input = "if (2 > 1) { true; } else { false; }";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        /* 等下, 此时BlockStatement是不是算作1个Statement */
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+
+        Statement statement = statements.get(0);
+        if (!(statement instanceof ExpressionStatement)){
+            Assert.fail("statement is not instance of ExpressionStatement");
+        }
+        ExpressionStatement expressionStatement = (ExpressionStatement) statement;
+        Expression expression = expressionStatement.expression();
+        if (!(expression instanceof IfExpression)){
+            Assert.fail("expression is not instance of IfExpression");
+        }
+        IfExpression ifExpression = (IfExpression) expression;
+
+        /* 断言条件表达式 */
+        Expression condition = ifExpression.condition();
+        /* condition得是个中缀表达式 */
+        if (!(condition instanceof InfixExpression)){
+            Assert.fail("condition is not instance of InfixExpression");
+        }
+        InfixExpression condComps = (InfixExpression) condition;
+        Assert.assertEquals(condComps.left().tokenLiteral(), "2");
+        Assert.assertEquals(condComps.operator(), ">");
+        Assert.assertEquals(condComps.right().tokenLiteral(), "1");
+
+        /* 断言Consequence, 这个通过了 */
+        BlockStatement consequence = ifExpression.consequence();
+        List<Statement> consequenceStatements = consequence.statements();
+        Assert.assertEquals(consequenceStatements.size(), 1);
+        Statement firstInConsequence = consequenceStatements.get(0);
+        if (!(firstInConsequence instanceof ExpressionStatement)){
+            Assert.fail("first statement in consequence is not instance of ExpressionStatement");
+        }
+        ExpressionStatement firstExpressionStatement = (ExpressionStatement) firstInConsequence;
+        Expression expressionInFirst = firstExpressionStatement.expression();
+        if (!(expressionInFirst instanceof BooleanLiteral)){
+            Assert.fail("expression in first is not instance of BooleanLiteral");
+        }
+        BooleanLiteral booleanLiteralInConsequence = (BooleanLiteral) expressionInFirst;
+        Assert.assertEquals(booleanLiteralInConsequence, BooleanLiteral.TRUE);
+
+        /* 断言Alternative */
+        BlockStatement alternative = ifExpression.alternative();
+        List<Statement> alternativeStatements = alternative.statements();
+        Assert.assertEquals(alternativeStatements.size(), 1);
+        Statement firstInAliternative = alternativeStatements.get(0);
+        if (!(firstInAliternative instanceof ExpressionStatement)){
+            Assert.fail("first statement in alternative is not instance of ExpressionStatement");
+        }
+        ExpressionStatement firstExpressionStatement1 = (ExpressionStatement) firstInAliternative;
+        Expression expressionInFirst1 = firstExpressionStatement1.expression();
+        if (!(expressionInFirst1 instanceof BooleanLiteral)){
+            Assert.fail("expression in first 1 is not instance of BooleanLiteral");
+        }
+        BooleanLiteral booleanLiteralInAlternative = (BooleanLiteral) expressionInFirst1;
+        Assert.assertEquals(booleanLiteralInAlternative, BooleanLiteral.FALSE);
+    }
+
+    /* ============ if 表达式：无分号 / 多语句 / else ============ */
+
+    @Test
+    public void testIfExpressionWithoutElse(){
+        IfExpression ifExpression = parseIfExpression("if (x < y) { x }");
+
+        /* 条件: x < y */
+        Assert.assertTrue(ifExpression.condition() instanceof InfixExpression);
+        InfixExpression condition = (InfixExpression) ifExpression.condition();
+        testIdentifier(condition.left(), "x");
+        Assert.assertEquals(condition.operator(), "<");
+        testIdentifier(condition.right(), "y");
+
+        /* consequence: 1 条语句 x，无分号也不死循环 */
+        Assert.assertEquals(ifExpression.consequence().statements().size(), 1);
+        testIdentifier(((ExpressionStatement) ifExpression.consequence().statements().get(0)).expression(), "x");
+
+        /* 无 else */
+        Assert.assertNull(ifExpression.alternative());
+    }
+
+    @Test
+    public void testIfExpressionWithElse(){
+        IfExpression ifExpression = parseIfExpression("if (x < y) { x } else { y }");
+
+        Assert.assertEquals(ifExpression.consequence().statements().size(), 1);
+        testIdentifier(((ExpressionStatement) ifExpression.consequence().statements().get(0)).expression(), "x");
+
+        Assert.assertNotNull(ifExpression.alternative());
+        Assert.assertEquals(ifExpression.alternative().statements().size(), 1);
+        testIdentifier(((ExpressionStatement) ifExpression.alternative().statements().get(0)).expression(), "y");
+    }
+
+    @Test
+    public void testIfExpressionMultiStatement(){
+        IfExpression ifExpression = parseIfExpression("if (x < y) { x; y; } else { z; }");
+
+        /* consequence 有 2 条语句 */
+        Assert.assertEquals(ifExpression.consequence().statements().size(), 2);
+        testIdentifier(((ExpressionStatement) ifExpression.consequence().statements().get(0)).expression(), "x");
+        testIdentifier(((ExpressionStatement) ifExpression.consequence().statements().get(1)).expression(), "y");
+
+        /* alternative 有 1 条语句 */
+        Assert.assertEquals(ifExpression.alternative().statements().size(), 1);
+        testIdentifier(((ExpressionStatement) ifExpression.alternative().statements().get(0)).expression(), "z");
+    }
+
+    private IfExpression parseIfExpression(String input){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof IfExpression, "expression is not IfExpression");
+        return (IfExpression) expression;
     }
 }
