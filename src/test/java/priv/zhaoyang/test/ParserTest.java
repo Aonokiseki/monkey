@@ -589,4 +589,62 @@ public class ParserTest {
         Assert.assertTrue(expression instanceof FunctionExpression, "expression is not FunctionExpression");
         return (FunctionExpression) expression;
     }
+
+    /* ============ while 表达式 ============ */
+
+    @Test
+    public void testWhileExpression(){
+        WhileExpression we = parseWhileExpression("while (x < 5) { x }");
+
+        /* 条件: x < 5 */
+        Assert.assertTrue(we.condition() instanceof InfixExpression, "condition is not InfixExpression");
+        InfixExpression condition = (InfixExpression) we.condition();
+        testIdentifier(condition.left(), "x");
+        Assert.assertEquals(condition.operator(), "<");
+        testIntegerLiteral(condition.right(), 5L);
+
+        /* body: 1 条语句 x，无分号也不死循环 */
+        Assert.assertEquals(we.body().statements().size(), 1);
+        testIdentifier(((ExpressionStatement) we.body().statements().get(0)).expression(), "x");
+    }
+
+    @Test
+    public void testWhileExpressionMultiStatement(){
+        WhileExpression we = parseWhileExpression("while (x > 0) { x - 1; x }");
+
+        /* body: 2 条语句 */
+        Assert.assertEquals(we.body().statements().size(), 2);
+
+        /* 第一条: x - 1 */
+        Expression first = ((ExpressionStatement) we.body().statements().get(0)).expression();
+        Assert.assertTrue(first instanceof InfixExpression, "first is not InfixExpression");
+        InfixExpression minus = (InfixExpression) first;
+        testIdentifier(minus.left(), "x");
+        Assert.assertEquals(minus.operator(), "-");
+        testIntegerLiteral(minus.right(), 1L);
+
+        /* 第二条: x */
+        testIdentifier(((ExpressionStatement) we.body().statements().get(1)).expression(), "x");
+    }
+
+    @Test
+    public void testWhileExpressionBooleanCondition(){
+        WhileExpression we = parseWhileExpression("while (true) { 5 }");
+
+        Assert.assertTrue(we.condition() instanceof BooleanLiteral, "condition is not BooleanLiteral");
+        Assert.assertEquals(we.condition(), BooleanLiteral.TRUE);
+
+        Assert.assertEquals(we.body().statements().size(), 1);
+        testIntegerLiteral(((ExpressionStatement) we.body().statements().get(0)).expression(), 5L);
+    }
+
+    private WhileExpression parseWhileExpression(String input){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof WhileExpression, "expression is not WhileExpression");
+        return (WhileExpression) expression;
+    }
 }

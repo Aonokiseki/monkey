@@ -38,6 +38,7 @@ public enum TokenType {
     IF("IF"),
     ELSE("ELSE"),
     RETURN("RETURN"),
+    WHILE("WHILE"), //原书没有循环, 试试加上去
     ;
 
     private String literal;

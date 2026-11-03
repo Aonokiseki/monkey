@@ -15,6 +15,7 @@ public class Keywords {
         KEYWORDS.put("if", TokenType.IF);
         KEYWORDS.put("else", TokenType.ELSE);
         KEYWORDS.put("return", TokenType.RETURN);
+        KEYWORDS.put("while", TokenType.WHILE);
     }
 
     public static boolean contains(String letters){

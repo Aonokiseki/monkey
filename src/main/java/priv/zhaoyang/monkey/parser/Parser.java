@@ -64,6 +64,7 @@ public class Parser {
         registerPrefix(TokenType.LPAREN, this::parseGroupExpression);
         registerPrefix(TokenType.IF, this::parseIfExpression);
         registerPrefix(TokenType.FUNCTION, this::parseFunctionExpression);
+        registerPrefix(TokenType.WHILE, this::parseWhileExpression);
 
         /* 中缀注册 */
         registerInfix(TokenType.PLUS, this::parseInfixExpression);
@@ -555,6 +556,40 @@ public class Parser {
         functionExpression.putBody(body);
 
         return functionExpression;
+    }
+
+    /* 解析while循环表达式: while(condition){blockStatement}
+     * 注: 原书上没有 */
+    private WhileExpression parseWhileExpression(){
+        WhileExpression whileExpression = new WhileExpression(current);
+
+        if (next.type != TokenType.LPAREN){
+            peekError(TokenType.LPAREN);
+            return null;
+        }
+        moveNext();  // current=LPAREN, next=condition 开头
+        moveNext();  // current=condition 开头
+
+        Expression condition = parseExpression(Precedence.LOWEST);
+        whileExpression.putCondition(condition);
+
+        if (next.type != TokenType.RPAREN){
+            peekError(TokenType.RPAREN);
+            return null;
+        }
+        moveNext();  // current=RPAREN, next=LBRACE
+
+        /* 校验并前进到左大括号：调用 parseBlockStatement 前 current 必须停在 { 上 */
+        if (next.type != TokenType.LBRACE){
+            peekError(TokenType.LBRACE);
+            return null;
+        }
+        moveNext();  // current=LBRACE
+
+        BlockStatement body = parseBlockStatement();
+        whileExpression.putBody(body);
+
+        return whileExpression;
     }
 
 }
