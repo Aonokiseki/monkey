@@ -11,6 +11,7 @@ import priv.zhaoyang.monkey.token.TokenType;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class ParserTest {
@@ -476,5 +477,116 @@ public class ParserTest {
         Expression expression = firstExpression(program);
         Assert.assertTrue(expression instanceof IfExpression, "expression is not IfExpression");
         return (IfExpression) expression;
+    }
+
+    @Test
+    public void testFunctionExpression(){
+        String input = "fn(x,y,z){x + 1; y + 2; z + 3;}";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+
+        Statement statement = statements.get(0);
+        if (!(statement instanceof ExpressionStatement)){
+            Assert.fail("statement is not instance of ExpressionStatement");
+        }
+        ExpressionStatement topStatement = (ExpressionStatement)statement;
+        Expression topExpression = topStatement.expression();
+
+        if(!(topExpression instanceof FunctionExpression)){
+            Assert.fail("topExpression is not instance of FunctionExpression");
+        }
+        FunctionExpression fe = (FunctionExpression) topExpression;
+
+        /* 断言参数数量 */
+        List<Identifier> parameters = fe.parameters();
+        List<String> expectedParameterNames = Arrays.asList("x", "y", "z");
+        Assert.assertEquals(parameters.size(), expectedParameterNames.size());
+        for(int i = 0; i < parameters.size(); i++){
+            Assert.assertEquals(parameters.get(i).tokenLiteral(), expectedParameterNames.get(i));
+        }
+
+        /* 断言函数体 */
+        BlockStatement body = fe.body();
+        List<Statement> statementsInBody = body.statements();
+        List<String> expectedRights = Arrays.asList("1", "2", "3");
+        Assert.assertEquals(statementsInBody.size(), 3);
+        for(int i = 0; i < statementsInBody.size(); i++){
+            Statement statementInBody = statementsInBody.get(i);
+
+            if(!(statementInBody instanceof ExpressionStatement)){
+                Assert.fail("statementInBody is not instance of ExpressionStatement");
+            }
+
+            ExpressionStatement es = (ExpressionStatement) statementInBody;
+            Expression e = es.expression();
+
+            if (!(e instanceof InfixExpression)){
+                Assert.fail("e is not instance of InfixExpression");
+            }
+            InfixExpression ie = (InfixExpression) e;
+
+            Assert.assertEquals(ie.left().tokenLiteral(), expectedParameterNames.get(i));
+            Assert.assertEquals(ie.operator(), "+");
+            Assert.assertEquals(ie.right().tokenLiteral(), expectedRights.get(i));
+        }
+    }
+
+    /* ============ 函数表达式：参数解析 ============ */
+
+    @DataProvider(name = "functionParameterParsingDataProvider")
+    public Object[][] functionParameterParsingDataProvider(){
+        return new Object[][]{
+                new Object[]{"fn() {}", Collections.emptyList()},
+                new Object[]{"fn(x) {}", Arrays.asList("x")},
+                new Object[]{"fn(x, y, z) {}", Arrays.asList("x", "y", "z")},
+        };
+    }
+
+    @Test(dataProvider = "functionParameterParsingDataProvider")
+    public void testFunctionParameterParsing(String input, List<String> expectedParams){
+        FunctionExpression fe = parseFunctionExpression(input);
+
+        List<Identifier> parameters = fe.parameters();
+        Assert.assertEquals(parameters.size(), expectedParams.size());
+        for (int i = 0; i < parameters.size(); i++){
+            Assert.assertEquals(parameters.get(i).tokenLiteral(), expectedParams.get(i));
+        }
+    }
+
+    @Test
+    public void testFunctionLiteralBody(){
+        FunctionExpression fe = parseFunctionExpression("fn(x, y) { x + y; }");
+
+        /* 参数 x, y */
+        Assert.assertEquals(fe.parameters().size(), 2);
+
+        /* body: 1 条语句 x + y */
+        BlockStatement body = fe.body();
+        Assert.assertEquals(body.statements().size(), 1);
+
+        Statement statement = body.statements().get(0);
+        Assert.assertTrue(statement instanceof ExpressionStatement, "body statement is not ExpressionStatement");
+        Expression expression = ((ExpressionStatement) statement).expression();
+        Assert.assertTrue(expression instanceof InfixExpression, "expression is not InfixExpression");
+        InfixExpression infix = (InfixExpression) expression;
+        testIdentifier(infix.left(), "x");
+        Assert.assertEquals(infix.operator(), "+");
+        testIdentifier(infix.right(), "y");
+    }
+
+    private FunctionExpression parseFunctionExpression(String input){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof FunctionExpression, "expression is not FunctionExpression");
+        return (FunctionExpression) expression;
     }
 }

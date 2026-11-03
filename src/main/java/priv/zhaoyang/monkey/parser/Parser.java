@@ -24,6 +24,7 @@ package priv.zhaoyang.monkey.parser;
       4.7: 实现布尔字面量
       4.8: 实现分组表达式
       4.9: if表达式
+      4.10: 函数表达式
  * */
 
 
@@ -62,6 +63,7 @@ public class Parser {
         registerPrefix(TokenType.FALSE, this::parseBooleanLiteral);
         registerPrefix(TokenType.LPAREN, this::parseGroupExpression);
         registerPrefix(TokenType.IF, this::parseIfExpression);
+        registerPrefix(TokenType.FUNCTION, this::parseFunctionExpression);
 
         /* 中缀注册 */
         registerInfix(TokenType.PLUS, this::parseInfixExpression);
@@ -483,6 +485,76 @@ public class Parser {
         blockStatement.putStatements(statements);
 
         return blockStatement;
+    }
+
+    /* 解析函数表达式: fn(参数列表) { 函数体 } */
+    /* 指针轨迹示例（以 fn(x,y,z){x+1;y+2;z+3;} 为例）：
+     *
+     * token 编号: T0=fn  T1=(  T2=x  T3=,  T4=y  T5=,  T6=z  T7=)  T8={  T9=x ...
+     *
+     * 构造后:                          current=T0(fn),  next=T1(()
+     *
+     * ① 校验左括号(next==LPAREN) 后 moveNext×2:
+     *                                   current=T2(x),   next=T3(,)   ← 越过 "fn("，停在第一个参数 x
+     *
+     * ② 参数循环（只要 next 是逗号或右括号，就把 current 解析成一个参数）:
+     *    第1轮: current=T2(x) 解析为参数 x; 之后 moveNext×2 → current=T4(y), next=T5(,)
+     *    第2轮: current=T4(y) 解析为参数 y; 之后 moveNext×2 → current=T6(z), next=T7())
+     *    第3轮: current=T6(z) 解析为参数 z; next==RPAREN → moveNext → current=T7()), next=T8({) 然后 break
+     *    循环结束: parameters=[x,y,z],  current=T7()),  next=T8({)
+     *
+     * ③ 校验左大括号(next==LBRACE) 后 moveNext×1:
+     *                                   current=T8({),   next=T9(x)   ← 停在 { 上，交给 parseBlockStatement
+     *
+     * ④ parseBlockStatement(): 它期望 current 指向 {（内部会自己 moveNext 跳过 {），
+     *    负责解析 body 内部（指针分析见 parseBlockStatement 的注释），返回时 current=RBRACE。
+     */
+    private FunctionExpression parseFunctionExpression() {
+        FunctionExpression functionExpression = new FunctionExpression(current);
+
+        /* ① 校验左括号并越过 fn( */
+        if(next.type != TokenType.LPAREN) {
+            peekError(TokenType.LPAREN);
+            return null;
+        }
+        /* 借助上方的例子来理解, current=FUNCTION, next=LPAREN */
+        moveNext();
+        /* current=LPAREN, next=第一个argument, 也即x */
+        moveNext();
+        /* current=x, next=COMMA */
+
+        /* ② 解析参数列表 */
+        List<Identifier> arguments = new ArrayList<>();
+        while (next.type == TokenType.COMMA || next.type == TokenType.RPAREN){
+            Identifier identifier = parseIdentifierExpression();
+            arguments.add(identifier);
+
+            /* 最后一个参数：next 是右括号，越过它并结束循环 */
+            if (next.type == TokenType.RPAREN){
+                moveNext();
+                break;
+            }
+            /* 非最后一个参数：越过逗号、停在下一个参数上（moveNext×2） */
+            /* current=identifier, next=COMMA */
+            moveNext();
+            /* current=COMMA, next指向了下一个argument */
+            moveNext();
+            /* 移动后, current指向了下一个argument */
+        }
+        functionExpression.putParameters(arguments);
+
+        /* ③ 校验左大括号，停在 { 上（parseBlockStatement 期望 current 是 {） */
+        if (next.type != TokenType.LBRACE) {
+            peekError(TokenType.LBRACE);
+            return null;
+        }
+        moveNext();
+
+        /* ④ 解析函数体 */
+        BlockStatement body = parseBlockStatement();
+        functionExpression.putBody(body);
+
+        return functionExpression;
     }
 
 }
