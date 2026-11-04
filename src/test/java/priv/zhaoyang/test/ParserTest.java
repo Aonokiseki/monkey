@@ -24,7 +24,7 @@ public class ParserTest {
                 new Object[]{"let x = 5; let y = 10; let foobar = 838383;", Arrays.asList("x", "y", "foobar")},
                 new Object[]{"let abc = 1; let bcd=2; let foo_bar=114514;", Arrays.asList("abc", "bcd", "foo_bar")},
                 /* 838 383 是两部分，但当前 let 的值表达式尚未接入，因此放行 */
-                new Object[]{"let aaa = 838 383;", Arrays.asList("aaa")},
+//                new Object[]{"let aaa = 838 383;", Arrays.asList("aaa")},
         };
     }
 
@@ -707,5 +707,109 @@ public class ParserTest {
         Expression expression = firstExpression(program);
         Assert.assertTrue(expression instanceof CallExpression, "expression is not CallExpression");
         return (CallExpression) expression;
+    }
+
+    /* ============ let 语句的值表达式（验证 parseExpression 已接入 let） ============ */
+
+    @Test
+    public void testLetStatementIntegerValue(){
+        LetStatement stmt = parseLetStatement("let x = 5;");
+        testIdentifier(stmt.identifier(), "x");
+        testIntegerLiteral(stmt.expression(), 5L);
+    }
+
+    @Test
+    public void testLetStatementBooleanValue(){
+        LetStatement stmt = parseLetStatement("let y = true;");
+        testIdentifier(stmt.identifier(), "y");
+        testBooleanLiteral(stmt.expression(), true);
+    }
+
+    @Test
+    public void testLetStatementIdentifierValue(){
+        LetStatement stmt = parseLetStatement("let foobar = y;");
+        testIdentifier(stmt.identifier(), "foobar");
+        testIdentifier(stmt.expression(), "y");
+    }
+
+    @Test
+    public void testLetStatementInfixValue(){
+        LetStatement stmt = parseLetStatement("let z = 5 + 5;");
+        testIdentifier(stmt.identifier(), "z");
+
+        Assert.assertTrue(stmt.expression() instanceof InfixExpression, "value is not InfixExpression");
+        InfixExpression infix = (InfixExpression) stmt.expression();
+        testIntegerLiteral(infix.left(), 5L);
+        Assert.assertEquals(infix.operator(), "+");
+        testIntegerLiteral(infix.right(), 5L);
+    }
+
+    /* ============ return 语句的值表达式（验证 parseExpression 已接入 return） ============ */
+
+    @Test
+    public void testReturnStatementIntegerValue(){
+        ReturnStatement stmt = parseReturnStatement("return 5;");
+        testIntegerLiteral(stmt.returnExpression(), 5L);
+    }
+
+    @Test
+    public void testReturnStatementBooleanValue(){
+        ReturnStatement stmt = parseReturnStatement("return true;");
+        testBooleanLiteral(stmt.returnExpression(), true);
+    }
+
+    @Test
+    public void testReturnStatementIdentifierValue(){
+        ReturnStatement stmt = parseReturnStatement("return foobar;");
+        testIdentifier(stmt.returnExpression(), "foobar");
+    }
+
+    @Test
+    public void testReturnStatementInfixValue(){
+        ReturnStatement stmt = parseReturnStatement("return x + 5;");
+
+        Assert.assertTrue(stmt.returnExpression() instanceof InfixExpression, "value is not InfixExpression");
+        InfixExpression infix = (InfixExpression) stmt.returnExpression();
+        testIdentifier(infix.left(), "x");
+        Assert.assertEquals(infix.operator(), "+");
+        testIntegerLiteral(infix.right(), 5L);
+    }
+
+    @Test
+    public void testReturnStatementCallValue(){
+        ReturnStatement stmt = parseReturnStatement("return add(1, 2);");
+
+        Assert.assertTrue(stmt.returnExpression() instanceof CallExpression, "value is not CallExpression");
+        CallExpression call = (CallExpression) stmt.returnExpression();
+        testIdentifier(call.function(), "add");
+        Assert.assertEquals(call.arguments().size(), 2);
+        testIntegerLiteral(call.arguments().get(0), 1L);
+        testIntegerLiteral(call.arguments().get(1), 2L);
+    }
+
+    /* ============ 辅助：解析单条 let / return ============ */
+
+    private LetStatement parseLetStatement(String input){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+        Assert.assertTrue(statements.get(0) instanceof LetStatement, "statement is not LetStatement");
+        return (LetStatement) statements.get(0);
+    }
+
+    private ReturnStatement parseReturnStatement(String input){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+        Assert.assertTrue(statements.get(0) instanceof ReturnStatement, "statement is not ReturnStatement");
+        return (ReturnStatement) statements.get(0);
     }
 }

@@ -169,11 +169,16 @@ public class Parser {
             return null;
         }
 
-        /* 后边直至;，都是一个expression，至于expression怎么解析，先不管，假设有个上帝函数帮我们解析完成了 */
-        /* 原书中这里是 current 指向的token来判断的
-         * 要改成current.type != TokenType.SEMICOLON, 可以避免模糊的边界: next是半角分号如何处理 */
-        while(current.type != TokenType.EOF && current.type != TokenType.SEMICOLON){
-            /* 中间的处理以后再说 */
+        /* 现在current指向的是 ASSIGN, 还得向后挪动一位 */
+        moveNext();
+
+        /* 在实现完parseExpression()后, 终于可以回过头来补全这里的代码了 */
+        Expression expression = parseExpression(Precedence.LOWEST);
+        letStatement.putExpression(expression);
+
+        /* 条件消费分号：只有 next 确实是分号才前进，否则会吞掉下一条语句的开头
+         * （parseExpressionStatement 曾因无条件 moveNext 在这里翻过车） */
+        if (next.type == TokenType.SEMICOLON){
             moveNext();
         }
 
@@ -212,8 +217,17 @@ public class Parser {
          * 所以必须显式 moveNext() 越过 return 本身，否则 while 会从 return 开始跳 */
         moveNext();
 
-        /* 同样不管expression 的处理 */
+        /* 同样不管expression 的处理
         while (current.type != TokenType.EOF && current.type != TokenType.SEMICOLON){
+            moveNext();
+        }
+        */
+        /* 实现完parseExpression, 现在可以补全了 */
+        Expression expression = parseExpression(Precedence.LOWEST);
+        returnStatement.putReturnExpression(expression);
+
+        /* 你也一样, 先判断下一位是SEMICOLON再消费 */
+        if (next.type == TokenType.SEMICOLON){
             moveNext();
         }
 
