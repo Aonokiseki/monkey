@@ -19,6 +19,7 @@ public class PrecedenceMap {
         PRECEDENCE_MAP.put(TokenType.ASTERISK, Precedence.PRODUCT);
         PRECEDENCE_MAP.put(TokenType.SLASH, Precedence.PRODUCT);
         PRECEDENCE_MAP.put(TokenType.BANG, Precedence.PREFIX);
+        PRECEDENCE_MAP.put(TokenType.LPAREN, Precedence.CALL);
     }
 
     public static boolean contains(TokenType tokenType){

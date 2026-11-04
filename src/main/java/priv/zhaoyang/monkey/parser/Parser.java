@@ -25,6 +25,8 @@ package priv.zhaoyang.monkey.parser;
       4.8: 实现分组表达式
       4.9: if表达式
       4.10: 函数表达式
+      4.11: while表达式, 拓展原书没有的拓展
+      4.12: 调用表达式
  * */
 
 
@@ -75,6 +77,7 @@ public class Parser {
         registerInfix(TokenType.NOT_EQ, this::parseInfixExpression);
         registerInfix(TokenType.LT, this::parseInfixExpression);
         registerInfix(TokenType.GT, this::parseInfixExpression);
+        registerInfix(TokenType.LPAREN, this::parseCallExpression);
 
         /* 连续执行2次moveNext, 让current和next都有指向的对象 */
         moveNext();
@@ -590,6 +593,84 @@ public class Parser {
         whileExpression.putBody(body);
 
         return whileExpression;
+    }
+
+    /* 解析调用表达式 */
+    /* 之前自然而然的就把调用当作了前缀, 这是错误的, 这就是思考逻辑:
+     * 1.思维惯性, 解析函数字面量是前缀的, 解析表达式默认也挂在前缀处理函数上, 这个想法不能算错, 问题在于后边发现了矛盾而不自知
+     * 2.之所以有这个思维惯性, 是因为想当然的把 expression1(expression2, expression3...)中的expression当作了一个关键字,
+     *   但它实际上只是个Expression, 不在词典里, 一厢情愿的将函数名硬是当作关键字FUNCTION处理.
+     * 3.更要命的还在后面, 又是左括号, 左括号之前已经注册了分组表达式了, 这里又是一厢情愿想把左括号再注册一次, 想着执行时某种天意
+     *   可以正确的帮我区分这是分组表达式还是调用表达式。到这里其实已经爆出了明显的矛盾了, 只要再多想一步, 就可以得出它应该挂在
+     *   中缀表达式的处理逻辑中
+     * 4.受到上述影响, 自然不会在参数列表中添加参数, 这个中缀表达式需要传入LPAREN左侧的表达式
+     * 嗯, 重新实现
+     * 5. 另外, 这个相通了以后, 对于[和{也就可以类比了:
+     * 对于'[', 挂在前缀则是定义列表, 如 dict = [1,2,3], 挂在中缀则是对列表或map索引, 如list[1]
+     * 对于'{', 前缀定义map, 中缀悬空, 当然可以用来解析结构体, 不过结构体的解析是一个很难的事, 如a.b.c.d=1, 同时涉及到解析和求值,
+     * 再比如 Person{name:zhangsan}和 Person{name:zhangsan}该如何判定相等, 总之就是太难了, 可能原作者顾虑到这些选择不实现
+     */
+    private CallExpression parseCallExpression(Expression function){
+        CallExpression callExpression = new CallExpression(current);  // current=LPAREN
+        callExpression.putFunction(function);
+
+        /* 为什么"第一个参数要放到循环外解析"（而不是在循环里统一解析所有参数）：
+         *
+         * 错误写法是"循环里解析所有参数"：
+         *   moveNext();                  // 到第一个参数
+         *   while (条件) {
+         *       parse current;           // 解析参数
+         *       moveNext(); moveNext();  // 跳到下一个参数
+         *   }
+         * 致命点：moveNext×2 之后，next 指向"下一个参数内部"的 token，而不是"分隔符"。
+         *
+         * 反例1 add(1, 2 * 3, 4 + 5)：
+         *   解析完 1 后：  current=1, next=,
+         *   moveNext×2：   current=2, next=*     ← next 是 *（参数内部），既不是逗号也不是右括号
+         *   于是无论条件写 next==COMMA 还是 next==COMMA||RPAREN，都在这里提前退出，2*3、4+5 被漏掉。
+         *
+         * 反例2 add(1, 2) 且条件写 next==COMMA：
+         *   moveNext×2 后：current=2, next=)     ← 最后一个参数前面是右括号，不是逗号
+         *   条件 next==COMMA 为假，2 被漏掉。
+         *
+         * 正解（原书结构）：先在循环外解析第一个参数，循环里只处理"逗号分隔的后续参数"。
+         * 这样每次判断循环条件时，next 都正好停在"分隔符"（逗号或右括号）上。
+         *
+         * Q:那么, 如果强行在循环里统一解析, 会带来什么问题或风险呢?
+         * A:这样一来, 循环条件就必须得是 next.type != TokenType.EOF 才能保证循环正常推进, 但这个条件太宽松了
+         *   遇到 add(1 2)（缺逗号）这类脏输入时行为会不一样
+         *
+         * 吐槽: 这些都是原作者不讲的地方, 这种细节上的坑就是这样, 说起来既无必要, 还破坏行文节奏。
+         *      但你要真想懂原因, 不得不再踩一遍坑 */
+        List<Expression> arguments = new ArrayList<>();
+
+        /* 无参: fn() */
+        if (next.type == TokenType.RPAREN){
+            moveNext();
+            callExpression.putArguments(arguments);
+            return callExpression;
+        }
+
+        /* 第一个参数（循环外） */
+        moveNext();
+        arguments.add(parseExpression(Precedence.LOWEST));
+
+        /* 后续参数（循环里，只在 next 是逗号时进入） */
+        while (next.type == TokenType.COMMA){
+            moveNext();  // current=COMMA
+            moveNext();  // current=下一个参数
+            arguments.add(parseExpression(Precedence.LOWEST));
+        }
+
+        /* 校验并跳过右括号 */
+        if (next.type != TokenType.RPAREN){
+            peekError(TokenType.RPAREN);
+            return null;
+        }
+        moveNext();
+
+        callExpression.putArguments(arguments);
+        return callExpression;
     }
 
 }

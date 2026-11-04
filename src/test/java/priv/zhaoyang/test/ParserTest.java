@@ -647,4 +647,65 @@ public class ParserTest {
         Assert.assertTrue(expression instanceof WhileExpression, "expression is not WhileExpression");
         return (WhileExpression) expression;
     }
+
+    /* ============ 调用表达式 ============ */
+
+    @Test
+    public void testCallExpression(){
+        CallExpression ce = parseCallExpression("add(1, 2 * 3, 4 + 5);");
+
+        /* function: add */
+        testIdentifier(ce.function(), "add");
+
+        /* 3 个参数 */
+        Assert.assertEquals(ce.arguments().size(), 3);
+        testIntegerLiteral(ce.arguments().get(0), 1L);
+
+        /* 2 * 3 */
+        Assert.assertTrue(ce.arguments().get(1) instanceof InfixExpression, "arg1 is not InfixExpression");
+        InfixExpression arg1 = (InfixExpression) ce.arguments().get(1);
+        testIntegerLiteral(arg1.left(), 2L);
+        Assert.assertEquals(arg1.operator(), "*");
+        testIntegerLiteral(arg1.right(), 3L);
+
+        /* 4 + 5 */
+        InfixExpression arg2 = (InfixExpression) ce.arguments().get(2);
+        testIntegerLiteral(arg2.left(), 4L);
+        Assert.assertEquals(arg2.operator(), "+");
+        testIntegerLiteral(arg2.right(), 5L);
+    }
+
+    @Test
+    public void testCallExpressionNoArgs(){
+        CallExpression ce = parseCallExpression("add();");
+
+        testIdentifier(ce.function(), "add");
+        Assert.assertEquals(ce.arguments().size(), 0);
+    }
+
+    @Test
+    public void testNestedCallExpression(){
+        CallExpression ce = parseCallExpression("add(1, sub(2, 3));");
+
+        testIdentifier(ce.function(), "add");
+        Assert.assertEquals(ce.arguments().size(), 2);
+        testIntegerLiteral(ce.arguments().get(0), 1L);
+
+        Assert.assertTrue(ce.arguments().get(1) instanceof CallExpression, "arg1 is not CallExpression");
+        CallExpression inner = (CallExpression) ce.arguments().get(1);
+        testIdentifier(inner.function(), "sub");
+        Assert.assertEquals(inner.arguments().size(), 2);
+        testIntegerLiteral(inner.arguments().get(0), 2L);
+        testIntegerLiteral(inner.arguments().get(1), 3L);
+    }
+
+    private CallExpression parseCallExpression(String input){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        Expression expression = firstExpression(program);
+        Assert.assertTrue(expression instanceof CallExpression, "expression is not CallExpression");
+        return (CallExpression) expression;
+    }
 }
