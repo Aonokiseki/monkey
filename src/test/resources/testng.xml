@@ -5,7 +5,9 @@
     <test name="unit-test">
         <classes>
             <class name="priv.zhaoyang.test.TokenTest"/>
-            <class name="priv.zhaoyang.test.ParserTest">
+            <class name="priv.zhaoyang.test.ParserTest"/>
+            <class name="priv.zhaoyang.test.EvaluatorTest">
+
             </class>
         </classes>
     </test>

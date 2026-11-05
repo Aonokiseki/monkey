@@ -1,10 +1,13 @@
 package priv.zhaoyang.monkey.repl;
 
+import priv.zhaoyang.monkey.ast.Program;
 import priv.zhaoyang.monkey.lexer.Lexer;
+import priv.zhaoyang.monkey.parser.Parser;
 import priv.zhaoyang.monkey.token.Token;
 import priv.zhaoyang.monkey.token.TokenType;
 
 import java.io.*;
+import java.util.List;
 
 public class Repl {
 
@@ -32,6 +35,12 @@ public class Repl {
             }
 
             Lexer lexer = new Lexer(line);
+            Parser parser = new Parser(lexer);
+            Program program = parser.parseProgram();
+            if (!parser.errors().isEmpty()){
+                printParseErrors(out, parser.errors());
+                continue;
+            }
 
             for(Token t = lexer.nextToken(); t.type != TokenType.EOF; t = lexer.nextToken()){
                 out.write(t.toString());
@@ -39,6 +48,12 @@ public class Repl {
             }
             out.flush();
 
+        }
+    }
+
+    private static void printParseErrors(Writer out, List<String> errors) throws IOException {
+        for (String error :errors){
+            out.write(error);
         }
     }
 }
