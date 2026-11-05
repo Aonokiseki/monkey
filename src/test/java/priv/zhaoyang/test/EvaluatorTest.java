@@ -82,6 +82,8 @@ public class EvaluatorTest {
                 new Object[]{"false; 42;", 42L},
                 new Object[]{"5; true;", true},
                 new Object[]{"42; false", false},
+                new Object[]{"5; -3;", -3L},
+                new Object[]{"true; !false;", true},
         };
     }
 
@@ -116,8 +118,6 @@ public class EvaluatorTest {
     @DataProvider(name = "testEvalUnsupportedNodeDataProvider")
     private Object[][] testEvalUnsupportedNodeDataProvider(Method method){
         return new Object[][]{
-                new Object[]{"-5"},      /* PrefixExpression */
-                new Object[]{"!true"},   /* PrefixExpression */
                 new Object[]{"5 + 5"},   /* InfixExpression */
                 new Object[]{"x"},       /* Identifier */
         };
@@ -164,5 +164,92 @@ public class EvaluatorTest {
         }
         BooleanObject booleanObject = (BooleanObject) object;
         Assert.assertEquals(booleanObject.value(), expected);
+    }
+
+    @DataProvider(name = "testPrefixExpressionDataProvider")
+    public Object[][] testPrefixExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"!true", BooleanObject.FALSE},
+                new Object[]{"!false", BooleanObject.TRUE},
+                new Object[]{"!true;", BooleanObject.FALSE},
+                new Object[]{"!false;", BooleanObject.TRUE},
+                /* 断言的是value, 不是IntegerObject, 不需要考虑对象是否相同 */
+                new Object[]{"-2", new IntegerObject(-2)},
+                new Object[]{"-2;", new IntegerObject(-2)},
+                /* 更多数值 & 空白分隔 */
+                new Object[]{"-5", new IntegerObject(-5L)},
+                new Object[]{"-0", new IntegerObject(0L)},
+                new Object[]{"-10", new IntegerObject(-10L)},
+                new Object[]{"-1234567890", new IntegerObject(-1234567890L)},
+                new Object[]{"-9223372036854775807", new IntegerObject(-9223372036854775807L)},
+                new Object[]{"- 5", new IntegerObject(-5L)},
+                new Object[]{"! true", BooleanObject.FALSE},
+                new Object[]{"!false\n", BooleanObject.TRUE},
+        };
+    }
+
+    /* 这个用例只考虑合法场景 */
+    @Test(dataProvider = "testPrefixExpressionDataProvider")
+    public void testPrefixExpression(String input, MonkeyObject expected){
+        MonkeyObject object = testProgram(input);
+        testPrefixExpression(object, expected);
+    }
+
+    private static void testPrefixExpression(MonkeyObject actual, MonkeyObject expected){
+        Assert.assertEquals(actual.type(), expected.type());
+
+        if (actual instanceof IntegerObject) {
+            IntegerObject actualInteger = (IntegerObject) actual;
+            IntegerObject expectedInteger = (IntegerObject) expected;
+            Assert.assertEquals(actualInteger.value(), expectedInteger.value());
+            return;
+        }
+
+        if (actual instanceof BooleanObject) {
+            Assert.assertEquals((BooleanObject)actual, (BooleanObject)expected);
+            return;
+        }
+
+        if (actual instanceof NullObject) {
+            Assert.assertSame(actual, expected);
+            return;
+        }
+
+        Assert.fail("Unknown monkey object: " + actual.getClass().getName());
+    }
+
+    /* ==================== 嵌套前缀（回归测试） ====================
+     * 这些用例曾经失败：旧实现按 AST 节点类型分派，遇到操作数是 PrefixExpression 就抛异常。
+     * 改为“先 eval 右操作数、按对象类型分派”后全部通过，保留作为回归。 */
+    @DataProvider(name = "testEvalNestedPrefixExpressionDataProvider")
+    private Object[][] testEvalNestedPrefixExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"!!true", BooleanObject.TRUE},
+                new Object[]{"!!false", BooleanObject.FALSE},
+                new Object[]{"!!true;", BooleanObject.TRUE},
+                new Object[]{"-(-5)", new IntegerObject(5L)},
+                new Object[]{"-(-5);", new IntegerObject(5L)},
+                new Object[]{"-(-(-5))", new IntegerObject(-5L)},
+                new Object[]{"-(-(-(-5)))", new IntegerObject(5L)},
+                new Object[]{"!!!true", BooleanObject.FALSE},
+                new Object[]{"!!!!true", BooleanObject.TRUE},
+                new Object[]{"!(!5)", BooleanObject.TRUE},
+                new Object[]{"!(-5)", BooleanObject.FALSE},
+                new Object[]{"-(!5)", NullObject.NULL},
+                /* - 作用于非整数 → NULL；! 作用于 NULL → true */
+                new Object[]{"!(-false)", BooleanObject.TRUE},
+                new Object[]{"-(!false)", NullObject.NULL},
+                new Object[]{"!(-(!false))", BooleanObject.TRUE},
+                new Object[]{"-(-false)", NullObject.NULL},
+                new Object[]{"-(-true)", NullObject.NULL},
+                new Object[]{"-(-(-false))", NullObject.NULL},
+                new Object[]{"!(-(-false))", BooleanObject.TRUE},
+        };
+    }
+
+    @Test(dataProvider = "testEvalNestedPrefixExpressionDataProvider")
+    public void testEvalNestedPrefixExpression(String input, MonkeyObject expected){
+        MonkeyObject object = testProgram(input);
+        testPrefixExpression(object, expected);
     }
 }
