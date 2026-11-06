@@ -118,7 +118,6 @@ public class EvaluatorTest {
     @DataProvider(name = "testEvalUnsupportedNodeDataProvider")
     private Object[][] testEvalUnsupportedNodeDataProvider(Method method){
         return new Object[][]{
-                new Object[]{"5 + 5"},   /* InfixExpression */
                 new Object[]{"x"},       /* Identifier */
         };
     }
@@ -251,5 +250,112 @@ public class EvaluatorTest {
     public void testEvalNestedPrefixExpression(String input, MonkeyObject expected){
         MonkeyObject object = testProgram(input);
         testPrefixExpression(object, expected);
+    }
+
+    @DataProvider(name = "testEvalInfixExpressionDataProvider")
+    public Object[][] testEvalInfixExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"5 + 5", new IntegerObject(10)},
+                new Object[]{"5 - 3", new IntegerObject(2)},
+                new Object[]{"5 * 3", new IntegerObject(15)},
+                new Object[]{"6 / 3", new IntegerObject(2)},
+                new Object[]{"6 > 3", BooleanObject.TRUE},
+                new Object[]{"6 < 3", BooleanObject.FALSE},
+                new Object[]{"6 == 6", BooleanObject.TRUE},
+                new Object[]{"6 != 6", BooleanObject.FALSE},
+                new Object[]{"true == true", BooleanObject.TRUE},
+                new Object[]{"true == false", BooleanObject.FALSE},
+                new Object[]{"true != true", BooleanObject.FALSE},
+                new Object[]{"true != false", BooleanObject.TRUE},
+
+                new Object[]{"5 + 5 + 5;", new IntegerObject(15)},
+                new Object[]{"5 + 6 * (12 + 12) / 4;", new IntegerObject(41)},
+                new Object[]{"5 + 6 * (12 + 12) / 4 > 40;", BooleanObject.TRUE},
+                new Object[]{"5 + 6 * (12 + 12) / 4 == 41;", BooleanObject.TRUE},
+
+                new Object[]{"!!!!true == true", BooleanObject.TRUE},
+                new Object[]{"!!!true == true", BooleanObject.FALSE},
+
+                /* 整除（向零截断） */
+                new Object[]{"7 / 2", new IntegerObject(3)},
+                new Object[]{"5 / 2", new IntegerObject(2)},
+                new Object[]{"0 / 5", new IntegerObject(0)},
+                /* 负数与正数混合 */
+                new Object[]{"-5 + 10", new IntegerObject(5)},
+                new Object[]{"5 - 10", new IntegerObject(-5)},
+                new Object[]{"-5 * -3", new IntegerObject(15)},
+                new Object[]{"-10 / 3", new IntegerObject(-3)},
+                /* 优先级与左结合 */
+                new Object[]{"5 + 5 * 2", new IntegerObject(15)},
+                new Object[]{"10 - 5 - 3", new IntegerObject(2)},
+                new Object[]{"2 * 3 + 4", new IntegerObject(10)},
+                /* 比较的边界 */
+                new Object[]{"5 < 5", BooleanObject.FALSE},
+                new Object[]{"5 > 5", BooleanObject.FALSE},
+                new Object[]{"5 == 5", BooleanObject.TRUE},
+                new Object[]{"5 != 6", BooleanObject.TRUE},
+                /* 前缀与中缀结合 */
+                new Object[]{"-5 == -5", BooleanObject.TRUE},
+                new Object[]{"-5 < 0", BooleanObject.TRUE},
+                new Object[]{"0 > -5", BooleanObject.TRUE},
+                new Object[]{"!false == true", BooleanObject.TRUE},
+                new Object[]{"!true == false", BooleanObject.TRUE},
+                /* == / != 对任意类型成立（同一性）：类型不同判“不相等” */
+                new Object[]{"5 == true", BooleanObject.FALSE},
+                new Object[]{"true == 5", BooleanObject.FALSE},
+                new Object[]{"5 != true", BooleanObject.TRUE},
+                new Object[]{"(-false) == 5", BooleanObject.FALSE},
+                new Object[]{"5 == (-false)", BooleanObject.FALSE},
+                new Object[]{"(-false) != 5", BooleanObject.TRUE},
+                new Object[]{"5 != (-false)", BooleanObject.TRUE},
+                new Object[]{"(-false) == true", BooleanObject.FALSE},
+                /* 非整数上的 + - * / < > → NULL（原书语义） */
+                new Object[]{"true + true", NullObject.NULL},
+                new Object[]{"true < true", NullObject.NULL},
+                new Object[]{"(-false) < (-false)", NullObject.NULL},
+                new Object[]{"(-false) + 5", NullObject.NULL},
+                new Object[]{"5 < true", NullObject.NULL},
+        };
+    }
+
+    @Test(dataProvider = "testEvalInfixExpressionDataProvider")
+    public void testEvalInfixExpression(String input, MonkeyObject expected){
+        MonkeyObject object = testProgram(input);
+        testInfixExpression(object, expected);
+    }
+
+    /* ==================== null 参与的中缀比较 ====================
+     * Monkey 没有 null 字面量，但 -false 会求值出 NULL，可借它测 null 的中缀语义。
+     * 原书：== / != 对任意值可用（同一性比较），所以 null == null → true、null != null → false。 */
+    @Test
+    public void testEvalInfixNullOperand(){
+        Assert.assertEquals(testProgram("(-false) == (-false)"), BooleanObject.TRUE);
+        Assert.assertEquals(testProgram("(-false) != (-false)"), BooleanObject.FALSE);
+    }
+
+    private static void testInfixExpression(MonkeyObject object, MonkeyObject expected){
+        if (object instanceof IntegerObject) {
+            IntegerObject integerObject = (IntegerObject) object;
+            if (!(expected instanceof IntegerObject)){
+                Assert.fail("expected is not instance of IntegerObject");
+            }
+            IntegerObject expectIntegerObject = (IntegerObject) expected;
+            Assert.assertEquals(integerObject.value(), expectIntegerObject.value());
+            return;
+        }
+        if (object instanceof BooleanObject) {
+            BooleanObject booleanObject = (BooleanObject) object;
+            if (!(expected instanceof BooleanObject)){
+                Assert.fail("expected is not instance of BooleanObject");
+            }
+            BooleanObject expectedBooleanObject = (BooleanObject) expected;
+            Assert.assertEquals(booleanObject.value(), expectedBooleanObject.value());
+            return;
+        }
+        if (object instanceof NullObject) {
+            Assert.assertSame(object, expected);
+            return;
+        }
+        Assert.fail("Unknown monkey object: " + object.getClass().getName());
     }
 }

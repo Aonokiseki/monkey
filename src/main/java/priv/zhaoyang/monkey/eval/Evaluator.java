@@ -49,6 +49,11 @@ public class Evaluator {
             return evalPrefixExpression((PrefixExpression) node);
         }
 
+        /* 处理中缀表达式 */
+        if (node instanceof InfixExpression) {
+            return evalInfixExpression((InfixExpression) node);
+        }
+
         /* 没必要执行如下判断:
          * node instanceof Expression
          * node instanceof Statement
@@ -133,6 +138,96 @@ public class Evaluator {
         if (right instanceof IntegerObject) {
             IntegerObject integerObject = (IntegerObject) right;
             return new IntegerObject(-integerObject.value());
+        }
+        return NullObject.NULL;
+    }
+
+    /* ==================== 中缀表达式求值 ====================
+     * 【心路历程·踩坑记录】
+     * 1. 一开始完全漏掉了 null：旧实现只分派 int/int 和 bool/bool 两种组合，遇到 null 直接掉到最后抛异常。
+     *    但 Monkey 里 null 是一等值（-false 就会产出 NULL），它完全可能出现在 == / != 两侧。
+     * 2. 后来补 null 又“补过头”：单独给「左右都是 NULL」写分支，还一度把它无条件返回 TRUE，
+     *    于是 (-false) != (-false) 错成 true、(-false) < (-false) 也错成 true——只盯着 null==null，
+     *    忘了还有 != 和其它运算符。
+     * 3. 再往后，单侧 null（情况4/5）调用 helper 时忘了写 return，结果算出来被丢掉、掉到最后 throw，
+     *    导致 (-false) == 5 也崩。
+     * 4. 最根本的偏差：对「类型不匹配」(5 == true) 和「非整数运算」(true + true) 一律抛异常，
+     *    而原书对 ==/!= 返回 false/true，对其余运算符返回 NULL。
+     *
+     * 为什么会这么想？两点心理：
+     *   a. 懒狗心理——类型都不一样了，凭什么还要我费劲去比较？
+     *   b. 对弱类型不放心——不先校验类型，怎么敢继续往下比？
+     * 但 Monkey 是动态语言，类型要到运行时才知道，左侧算出 boolean、右侧算出 int 是常态。
+     * 对 == 来说，类型不同直接判「不相等」即可；对其它运算符则给 NULL，而不是让程序崩溃
+     * （否则 5 == true 这种本应返回 false 的合法表达式会让程序直接崩，反而更糟）。
+     *
+     * 【为什么现在这样写就对了】
+     * 照搬原书的分派顺序：
+     *   - 左右都是整数 → evalIntegerInfixExpression，按“值”比较（+ - * / < > == !=）。
+     *   - 否则，== / != 对任意两个值成立：直接比较“是不是同一个对象”（同一性）。
+     *     BooleanObject / NullObject 都是单例，== 即身份相等；int vs bool 等类型不同自然不等。
+     *   - 剩下的 + - * / < > 只对整数有意义，一律返回 NULL。
+     * 于是 null==null→true、null!=null→false、5==true→false、5!=true→true、true+true→null，
+     * 全部和原书一致。 */
+    private static MonkeyObject evalInfixExpression(InfixExpression infixExpression){
+        /* 和前缀一样：先递归求值左右操作数，再按“对象类型 + 运算符”分派，不要看 AST 节点类型 */
+        MonkeyObject left = eval(infixExpression.left());
+        MonkeyObject right = eval(infixExpression.right());
+        String operator = infixExpression.operator();
+
+        /* 情况1：左右都是整数 → 整数运算（+ - * / < > == !=） */
+        if (left instanceof IntegerObject && right instanceof IntegerObject){
+            return evalIntegerInfixExpression((IntegerObject) left, operator, (IntegerObject) right);
+        }
+
+        /* 情况2：== 对任意两个值成立（同一性）。整数在上面已按值比较过，
+         * 走到这的 boolean / null 都是单例，== 即身份相等；类型不同（如 5 == true）自然不等。 */
+        if (operator.equals(TokenType.EQ.literal())) {
+            return left == right ? BooleanObject.TRUE : BooleanObject.FALSE;
+        }
+
+        /* 情况3：!= 同理，取反 */
+        if (operator.equals(TokenType.NOT_EQ.literal())) {
+            return left != right ? BooleanObject.TRUE : BooleanObject.FALSE;
+        }
+
+        /* 情况4：剩下的 + - * / < > 只对整数有意义，其它类型一律 NULL（原书语义） */
+        return NullObject.NULL;
+    }
+
+    /* operator可以是PLUS, MINUS, ASTERISK, SLASH, LT, GT, EQ, NOT_EQ */
+    private static MonkeyObject evalIntegerInfixExpression(IntegerObject left, String operator, IntegerObject right){
+        /* PLUS */
+        if (operator.equals(TokenType.PLUS.literal())) {
+            return new IntegerObject(left.value() + right.value());
+        }
+        /* MINUS */
+        if (operator.equals(TokenType.MINUS.literal())) {
+            return new IntegerObject(left.value() - right.value());
+        }
+        /* ASTERISK */
+        if (operator.equals(TokenType.ASTERISK.literal())){
+            return new IntegerObject(left.value() * right.value());
+        }
+        /* SLASH */
+        if (operator.equals(TokenType.SLASH.literal())) {
+            return new IntegerObject(left.value() / right.value());
+        }
+        /* LT */
+        if (operator.equals(TokenType.LT.literal())) {
+            return left.value() < right.value() ? BooleanObject.TRUE : BooleanObject.FALSE;
+        }
+        /* GT */
+        if (operator.equals(TokenType.GT.literal())) {
+            return left.value() > right.value() ? BooleanObject.TRUE : BooleanObject.FALSE;
+        }
+        /* EQ */
+        if (operator.equals(TokenType.EQ.literal())) {
+            return left.value() == right.value() ? BooleanObject.TRUE : BooleanObject.FALSE;
+        }
+        /* NOT_EQ */
+        if (operator.equals(TokenType.NOT_EQ.literal())) {
+            return left.value() != right.value() ? BooleanObject.TRUE : BooleanObject.FALSE;
         }
         return NullObject.NULL;
     }
