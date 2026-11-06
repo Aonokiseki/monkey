@@ -358,4 +358,45 @@ public class EvaluatorTest {
         }
         Assert.fail("Unknown monkey object: " + object.getClass().getName());
     }
+
+    /* ==================== if 表达式 ====================
+     * 语义（原书）：条件按“真值性”判断——NULL 和 false 为假，其余（true、整数等）为真。
+     * 为真求值 consequence，为假求值 alternative；无 else 时为假返回 NULL。 */
+    @DataProvider(name = "testEvalIfExpressionDataProvider")
+    private Object[][] testEvalIfExpressionDataProvider(Method method){
+        return new Object[][]{
+                /* 原书 TestIfElseExpressions */
+                new Object[]{"if (true) { 10 }", new IntegerObject(10)},
+                new Object[]{"if (false) { 10 }", NullObject.NULL},
+                new Object[]{"if (1) { 10 }", new IntegerObject(10)},
+                new Object[]{"if (1 < 2) { 10 }", new IntegerObject(10)},
+                new Object[]{"if (1 > 2) { 10 }", NullObject.NULL},
+                new Object[]{"if (1 > 2) { 10 } else { 20 }", new IntegerObject(20)},
+                new Object[]{"if (1 < 2) { 10 } else { 20 }", new IntegerObject(10)},
+                /* 真值性：0 也是 truthy */
+                new Object[]{"if (0) { 10 }", new IntegerObject(10)},
+                new Object[]{"if (0) { 10 } else { 20 }", new IntegerObject(10)},
+                /* 布尔 / 前缀条件 */
+                new Object[]{"if (!true) { 10 }", NullObject.NULL},
+                new Object[]{"if (!false) { 10 } else { 20 }", new IntegerObject(10)},
+                /* 多语句块：返回最后一条 */
+                new Object[]{"if (true) { 1; 2; 3; }", new IntegerObject(3)},
+                new Object[]{"if (false) { 1; 2; } else { 3; 4; }", new IntegerObject(4)},
+                /* 空块 → NULL */
+                new Object[]{"if (true) { }", NullObject.NULL},
+                /* 嵌套 if */
+                new Object[]{"if (true) { if (false) { 10 } else { 20 } }", new IntegerObject(20)},
+                new Object[]{"if (false) { 10 } else { if (true) { 20 } }", new IntegerObject(20)},
+                /* null 条件（-false 产出 NULL，falsy） */
+                new Object[]{"if (-false) { 10 }", NullObject.NULL},
+                /* 中缀布尔条件 */
+                new Object[]{"if (true == true) { 10 } else { 20 }", new IntegerObject(10)},
+        };
+    }
+
+    @Test(dataProvider = "testEvalIfExpressionDataProvider")
+    public void testEvalIfExpression(String input, MonkeyObject expected){
+        MonkeyObject object = testProgram(input);
+        testInfixExpression(object, expected);
+    }
 }

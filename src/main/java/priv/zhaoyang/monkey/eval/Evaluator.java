@@ -54,6 +54,15 @@ public class Evaluator {
             return evalInfixExpression((InfixExpression) node);
         }
 
+        /* 处理if表达式 */
+        if (node instanceof IfExpression) {
+            return evalIfExpression((IfExpression) node);
+        }
+
+        if (node instanceof BlockStatement){
+            return evalBlockStatement((BlockStatement) node);
+        }
+
         /* 没必要执行如下判断:
          * node instanceof Expression
          * node instanceof Statement
@@ -231,4 +240,63 @@ public class Evaluator {
         }
         return NullObject.NULL;
     }
+
+    /* 对条件表达式求值 */
+    private static MonkeyObject evalIfExpression(IfExpression ifExpression){
+
+        MonkeyObject conditionObject = eval(ifExpression.condition());
+
+        boolean finalCondition = isTruthy(conditionObject);
+
+        /* 如果condition==true, 对consequence求值 */
+        if (finalCondition) {
+            return eval(ifExpression.consequence());
+        }
+
+        /* 如果没有alternative, 直接返回 */
+        /* 这行实际没有必要, 因为进入下一块, 会经过eval, 也会遇到eval(null), 返回空值, emmm, 留着也无妨 */
+        if (ifExpression.alternative() == null){
+            return NullObject.NULL;
+        }
+
+        /* 如果有alternative, 再求值 */
+        return eval(ifExpression.alternative());
+    }
+
+    /* 判断ifExpression最终的条件表达式
+     *
+     * 原来的实现如下
+     * if (conditionObject instanceof BooleanObject){}
+     * else if (conditionObject instanceof IntegerObject){}
+     * else if (conditionObject instanceof NullObject){}
+     * else {throw new Exception...}
+     *
+     * 它有两处值得调整:
+     * 1.实现非常冗长, 可以简化为下边的逻辑, 也就是原书的逻辑
+     *   一下子就整洁很多, 只抄书是理解不了简洁的写法是如何优化出来的
+     * 2.凡没有特别标记为false的, 要求的一律返回true, 为什么会这样, 因为monkey是动态语言
+     *   类型不匹配是常态, 不要动辄就抛异常
+     *
+     *  */
+    private static boolean isTruthy(MonkeyObject object){
+        if (object == NullObject.NULL){
+            return false;
+        }
+        if (object == BooleanObject.FALSE){
+            return false;
+        }
+        return true;
+    }
+
+    /* 对块语句求值 */
+    private static MonkeyObject evalBlockStatement(BlockStatement blockStatement) {
+        MonkeyObject result = NullObject.NULL;
+
+        for (Statement statement : blockStatement.statements()){
+            result = eval(statement);
+        }
+
+        return result;
+    }
 }
+
