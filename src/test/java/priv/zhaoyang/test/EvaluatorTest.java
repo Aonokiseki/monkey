@@ -6,11 +6,7 @@ import org.testng.annotations.Test;
 import priv.zhaoyang.monkey.ast.Program;
 import priv.zhaoyang.monkey.eval.Evaluator;
 import priv.zhaoyang.monkey.lexer.Lexer;
-import priv.zhaoyang.monkey.object.BooleanObject;
-import priv.zhaoyang.monkey.object.IntegerObject;
-import priv.zhaoyang.monkey.object.MonkeyObject;
-import priv.zhaoyang.monkey.object.NullObject;
-import priv.zhaoyang.monkey.object.ObjectType;
+import priv.zhaoyang.monkey.object.*;
 import priv.zhaoyang.monkey.parser.Parser;
 
 import java.lang.reflect.Method;
@@ -398,5 +394,62 @@ public class EvaluatorTest {
     public void testEvalIfExpression(String input, MonkeyObject expected){
         MonkeyObject object = testProgram(input);
         testInfixExpression(object, expected);
+    }
+
+    @DataProvider(name = "testEvalReturnExpressionDataProvider")
+    private Object[][] testEvalReturnExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"return 1;", new IntegerObject(1)},
+                new Object[]{"return true;", BooleanObject.TRUE},
+                /* 注：没有 return null; 这种写法——null 不是关键字，会被 lexer 当成标识符。
+                 * 想返回 Monkey 的 null 值，用求值结果为 null 的表达式，如 return -false;（见下方用例） */
+                new Object[]{"return !!!false == true", BooleanObject.TRUE},
+                new Object[]{"return 5 + 6 * (12 + 12) / 4;", new IntegerObject(41)},
+                new Object[]{"return -false;", NullObject.NULL},
+                new Object[]{"return !5;", BooleanObject.FALSE},
+                new Object[]{"return if(1 > 2) {1} else {2};", new IntegerObject(2)},
+                /* 提前 return：return 后方的语句不可达 */
+                new Object[]{"1; return 2; 3;", new IntegerObject(2)},
+                /* return 穿透嵌套 if，提前返回 */
+                new Object[]{"if (10 > 1) { if (10 > 1) {return 1;} } return 2;", new IntegerObject(1)},
+                /* 原书 TestReturnStatements 补充 */
+                new Object[]{"return 10; 9;", new IntegerObject(10)},
+                new Object[]{"9; return 2 * 5; 9;", new IntegerObject(10)},
+                /* return 在 if 块内传播出来 */
+                new Object[]{"if (true) { return 10; } return 20;", new IntegerObject(10)},
+                new Object[]{"if (false) { return 10; } return 20;", new IntegerObject(20)},
+                /* 戳破 parseIfExpression 吞 token 的 bug：return 后面再跟一条语句，短路结果才会不同 */
+                new Object[]{"if (false) { return 10; } return 20; 30;", new IntegerObject(20)},
+        };
+    }
+
+    @Test(dataProvider = "testEvalReturnExpressionDataProvider")
+    public void testEvalReturnExpression(String input, MonkeyObject expected){
+        MonkeyObject actual = testProgram(input);
+
+        if (actual instanceof IntegerObject) {
+
+            if (!(expected instanceof IntegerObject)) {
+                Assert.fail("expected is not instance of IntegerObject");
+            }
+            IntegerObject expectIntegerObject = (IntegerObject) expected;
+            IntegerObject integerObject = (IntegerObject) actual;
+            Assert.assertEquals(integerObject.value(), expectIntegerObject.value());
+
+        } else if (actual instanceof BooleanObject){
+
+            if (!(expected instanceof BooleanObject)){
+                Assert.fail("expected is ot instance of BooleanObject");
+            }
+            BooleanObject expectBooleanObject = (BooleanObject) expected;
+            BooleanObject booleanObject = (BooleanObject) actual;
+            Assert.assertEquals(booleanObject, expectBooleanObject);
+
+        } else if (actual instanceof NullObject) {
+            Assert.assertTrue(expected instanceof NullObject);
+
+        } else {
+            Assert.fail("Invalid actual type: " + actual.getClass().getName());
+        }
     }
 }

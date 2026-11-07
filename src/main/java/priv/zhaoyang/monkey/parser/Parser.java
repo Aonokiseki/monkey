@@ -456,18 +456,36 @@ public class Parser {
 
         ifExpression.putConsequence(parseBlockStatement());
 
-        /* 【连锁调整】修复 parseBlockStatement 后它停在右大括号（current==RBRACE），
-         * 所以这里直接 moveNext() 越过右大括号即可。 */
-        moveNext();
+        /* 【bug 修复·parseIfExpression 吞掉 } 后面的 token】
+         * 触发用例（eval 阶段失败）：if (false) { return 10; } return 20; 30;
+         *   期望 20，实际却得到 30。
+         * 失败原因：parseBlockStatement 结束后 current 停在右大括号 }，旧实现无条件 moveNext()
+         *   越过 }，把 } 后面的 token（return 关键字）吃进了 current；随后 parseProgram 又
+         *   moveNext() 一次，return 被跳过，`return 20; 30;` 被错误解析成 `20; 30;`，
+         *   最后一条是 30，于是 return 20 的短路没生效。
+         * 修改方案：不要“消费” } 后面的 token，改成“窥探” next 是不是 else——
+         *   只有真的遇到 else 才前进，否则让 current 停在 }，把前进交给 parseProgram。
+         * 修改后为什么正确：current 停在 }（或 else 块的 }），parseProgram 的 moveNext()
+         *   正好前进到下一条语句的开头（return），return 语句得以被正确解析、提前短路。
+         *
+         * 为什么有 bug 却可能侥幸不暴露：只有当被吞的 token 不影响最终结果时才看不出来：
+         *   1. return 正好是最后一条：if (false) { return 10; } return 20; 被吞后剩 `20`，
+         *      最后一条的值恰好还是 20，和 return 20 短路出的 20 一致；
+         *   2. if 内部提前 return 短路：if (true) { return 10; } return 20; 无论后半句
+         *      是否被吞，都先返回 10，被吞的 return 20 根本没执行到。
+         *   要戳破它，得让“被吞的 token 影响结果”：在 return 后面再跟一条语句，如
+         *   `... return 20; 30;`，短路出 20 vs 被吞成 `20; 30;` 出 30，结果才会不一致。 */
+        if (next.type == TokenType.ELSE) {
+            moveNext();  // current = else
 
-        /* 此时要么是 ELSE，要么该结束了 */
-        if (current.type == TokenType.ELSE){
-            moveNext();  // current=else 的左大括号
+            if (next.type != TokenType.LBRACE){
+                peekError(TokenType.LBRACE);
+                return null;
+            }
+            moveNext();  // current = else 的 {
 
             ifExpression.putAlternative(parseBlockStatement());
-
-            /* 修复后 parseBlockStatement 已停在右大括号，直接越过 */
-            moveNext();
+            /* 不要 moveNext，让 current 停在 else 的右大括号，交给 parseProgram 前进 */
         }
 
         return ifExpression;

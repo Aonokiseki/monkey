@@ -1,10 +1,7 @@
 package priv.zhaoyang.monkey.eval;
 
 import priv.zhaoyang.monkey.ast.*;
-import priv.zhaoyang.monkey.object.BooleanObject;
-import priv.zhaoyang.monkey.object.IntegerObject;
-import priv.zhaoyang.monkey.object.MonkeyObject;
-import priv.zhaoyang.monkey.object.NullObject;
+import priv.zhaoyang.monkey.object.*;
 import priv.zhaoyang.monkey.token.TokenType;
 
 import java.util.List;
@@ -27,7 +24,28 @@ public class Evaluator {
         }
 
         if (node instanceof Program){
-            return evalStatements((Program) node);
+            /* 在实现ReturnStatement时, 可能因短路返回前一个return
+             * 比如 if (10 > 1) {if (10 > 1) return 1;} return 2;
+             *
+             * 为此引入了ReturnValue,
+             * ReturnValue本身实现了MonkeyObject, 又包含了一个MonkeyObject, 遍历statement并求值时, 遇到可以返回的值时
+             * 就填入ReturnValue中,
+             * 相当于给原本要返回的IntegerObject, BooleanObject, NullObject打了标, 标记这个实例可以返回了
+             *
+             * 这样一来产生了微妙的差异: Return语句返回的IntegerObject, BooleanObject, NullObject 它们此时还是ReturnValue包裹的
+             * 而普通表达式返回的IntegerObject, BooleanObject, NullObject就是自己.
+             * 在这里要统一, 将提前返回的ReturnValue解包出来.
+             *  */
+
+            /* 在最开始实现时, 还不需要考虑return语句, 可以先这么实现
+             * return evalStatements((Program) node);
+             */
+
+            MonkeyObject result = evalStatements((Program) node);
+            if (result instanceof ReturnValue){
+                return ((ReturnValue) result).value();
+            }
+            return result;
         }
 
         if (node instanceof ExpressionStatement) {
@@ -63,6 +81,11 @@ public class Evaluator {
             return evalBlockStatement((BlockStatement) node);
         }
 
+        if (node instanceof ReturnStatement) {
+            return evalReturnStatement((ReturnStatement) node);
+        }
+
+
         /* 没必要执行如下判断:
          * node instanceof Expression
          * node instanceof Statement
@@ -86,6 +109,11 @@ public class Evaluator {
         MonkeyObject result = NullObject.NULL;
         for(Statement statement : statements){
             result = eval(statement);
+
+            /* 在实现evalReturnExpression时需要加判断 */
+            if (result instanceof ReturnValue) {
+                return result;
+            }
         }
 
         return result;
@@ -294,9 +322,35 @@ public class Evaluator {
 
         for (Statement statement : blockStatement.statements()){
             result = eval(statement);
+
+            /* 在实现evalReturnExpression时需要加判断 */
+            if (result instanceof ReturnValue) {
+                return result;
+            }
         }
 
         return result;
+    }
+
+    /* 处理LetStatement */
+    /* 我记得此时该引入Environment了吧, 不然变量要往哪里存? */
+    /* 那稍后再说, 先来实现ReturnStatement */
+    private static MonkeyObject evalLetStatement(LetStatement letStatement){
+        return null;
+    }
+
+    /* 对returnStatement求值 */
+    /* 重点考虑这种情况如何实现:
+    *
+    * 1. 1; return 2; 3; 应该返回2
+    * 2. if(10 > 1){ if(10 > 1){ return 1; }} return 2; 应该返回1 */
+    private static ReturnValue evalReturnStatement(ReturnStatement returnStatement){
+        /* 但是话又说回来了, 都到return了, 还怎么控制之前有没有return, 让我看看书上怎么实现的
+         * 啊, 要定义一个returnValue, 还要改造evalProgram(我没有这个函数, 不考虑), evalBlockStatement, evalStatements
+         * 只要有循环对statement求值, 就在循环中检测这是不是个returnObject, 是就提前返回 */
+        MonkeyObject returnedObject = eval(returnStatement.returnExpression());
+        ReturnValue returnValue = new ReturnValue(returnedObject);
+        return returnValue;
     }
 }
 
