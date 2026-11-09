@@ -4,6 +4,7 @@ import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import priv.zhaoyang.monkey.ast.Program;
+import priv.zhaoyang.monkey.eval.Environment;
 import priv.zhaoyang.monkey.eval.Evaluator;
 import priv.zhaoyang.monkey.lexer.Lexer;
 import priv.zhaoyang.monkey.object.*;
@@ -105,7 +106,7 @@ public class EvaluatorTest {
     /* 直接对 null 节点求值：eval 的 null 防御应返回 NullObject.NULL 而非抛异常 */
     @Test
     public void testEvalNullNodeReturnsNullObject(){
-        Assert.assertSame(Evaluator.eval(null), NullObject.NULL);
+        Assert.assertSame(Evaluator.eval(null, new Environment()), NullObject.NULL);
     }
 
     /* ==================== 边界：未实现的节点“大声失败” ====================
@@ -125,11 +126,15 @@ public class EvaluatorTest {
 
     /* ==================== 辅助方法 ==================== */
     private static MonkeyObject testProgram(String input){
+        return testProgram(input, new Environment());
+    }
+
+    private static MonkeyObject testProgram(String input, Environment environment){
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
         Program program = parser.parseProgram();
         checkParserErrors(parser);
-        return Evaluator.eval(program);
+        return Evaluator.eval(program, environment);
     }
 
     private static void checkParserErrors(Parser parser){
@@ -426,7 +431,47 @@ public class EvaluatorTest {
     @Test(dataProvider = "testEvalReturnExpressionDataProvider")
     public void testEvalReturnExpression(String input, MonkeyObject expected){
         MonkeyObject actual = testProgram(input);
+        compare(actual, expected);
+    }
 
+    @DataProvider(name = "testEvalLetStatementDataProvider")
+    public Object[][] testEvalLetStatementDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"let a = 1; let b = 2;let c = 3; return a + b * c / 2 - 1;", new IntegerObject(3)},
+                new Object[]{"let a = !!!!true; let b = !a; return b;", BooleanObject.FALSE},
+                new Object[]{"let a = -false; return a;", NullObject.NULL},
+                /* 原书 TestLetStatements：末尾用 a; 取回 */
+                new Object[]{"let a = 5; a;", new IntegerObject(5)},
+                new Object[]{"let a = 5 * 5; a;", new IntegerObject(25)},
+                new Object[]{"let a = 5; let b = a; b;", new IntegerObject(5)},
+                new Object[]{"let a = 5; let b = a; let c = a + b + 5; c;", new IntegerObject(15)},
+                /* 布尔变量 */
+                new Object[]{"let b = true; b;", BooleanObject.TRUE},
+                new Object[]{"let b = false; b;", BooleanObject.FALSE},
+                /* 变量参与运算 */
+                new Object[]{"let a = 5; a + 1;", new IntegerObject(6)},
+                new Object[]{"let a = 5; !a;", BooleanObject.FALSE},
+                new Object[]{"let a = 5; a == 5;", BooleanObject.TRUE},
+                new Object[]{"let a = 5; a != 6;", BooleanObject.TRUE},
+                new Object[]{"let a = 5; let b = a + 5; a + b;", new IntegerObject(15)},
+                /* 变量用于 return / if */
+                new Object[]{"let a = 5; return a;", new IntegerObject(5)},
+                new Object[]{"let a = 5; if (a > 3) { 10 } else { 20 }", new IntegerObject(10)},
+                /* 重新赋值（末尾再用一次取回） */
+                new Object[]{"let a = 1; let a = 2; a;", new IntegerObject(2)},
+                /* 重新赋值后作为最后一条语句 */
+                new Object[]{"let a = 1; let a = 2;", new IntegerObject(2)},
+        };
+    }
+
+    @Test(dataProvider = "testEvalLetStatementDataProvider")
+    public void testEvalLetStatement(String input, MonkeyObject expected){
+        Environment environment = new Environment();
+        MonkeyObject actual = testProgram(input, environment);
+        compare(actual, expected);
+    }
+
+    private void compare(MonkeyObject actual, MonkeyObject expected){
         if (actual instanceof IntegerObject) {
 
             if (!(expected instanceof IntegerObject)) {

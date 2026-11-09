@@ -13,7 +13,8 @@ import java.util.List;
  *  */
 public class Evaluator {
 
-    public static MonkeyObject eval(Node node){
+    public static MonkeyObject eval(Node node,
+            /* 由于引入对LetStatement的求值添加参数: */Environment environment){
 
         /* 实现时遵守这样一个村规:
          * eval只负责分发和转型, 处理丢给其它方法, 力求简洁 */
@@ -41,7 +42,7 @@ public class Evaluator {
              * return evalStatements((Program) node);
              */
 
-            MonkeyObject result = evalStatements((Program) node);
+            MonkeyObject result = evalStatements((Program) node, environment);
             if (result instanceof ReturnValue){
                 return ((ReturnValue) result).value();
             }
@@ -51,7 +52,7 @@ public class Evaluator {
         if (node instanceof ExpressionStatement) {
             ExpressionStatement expressionStatement = (ExpressionStatement) node;
             Expression expression = expressionStatement.expression();
-            return eval(expression);
+            return eval(expression, environment);
         }
 
         if (node instanceof IntegerLiteral) {
@@ -64,25 +65,33 @@ public class Evaluator {
 
         /* 处理前缀表达式 */
         if (node instanceof PrefixExpression) {
-            return evalPrefixExpression((PrefixExpression) node);
+            return evalPrefixExpression((PrefixExpression) node, environment);
         }
 
         /* 处理中缀表达式 */
         if (node instanceof InfixExpression) {
-            return evalInfixExpression((InfixExpression) node);
+            return evalInfixExpression((InfixExpression) node, environment);
         }
 
         /* 处理if表达式 */
         if (node instanceof IfExpression) {
-            return evalIfExpression((IfExpression) node);
+            return evalIfExpression((IfExpression) node, environment);
         }
 
         if (node instanceof BlockStatement){
-            return evalBlockStatement((BlockStatement) node);
+            return evalBlockStatement((BlockStatement) node, environment);
         }
 
         if (node instanceof ReturnStatement) {
-            return evalReturnStatement((ReturnStatement) node);
+            return evalReturnStatement((ReturnStatement) node, environment);
+        }
+
+        if (node instanceof LetStatement){
+            return evalLetStatement((LetStatement) node, environment);
+        }
+
+        if (node instanceof Identifier){
+            return evalIdentifier((Identifier) node, environment);
         }
 
 
@@ -103,12 +112,12 @@ public class Evaluator {
         throw new IllegalStateException(String.format("Invalid Node[%s]", node.getClass().getName()));
     }
 
-    private static MonkeyObject evalStatements(Program program){
+    private static MonkeyObject evalStatements(Program program, Environment environment){
         List<Statement> statements = program.statements();
 
         MonkeyObject result = NullObject.NULL;
         for(Statement statement : statements){
-            result = eval(statement);
+            result = eval(statement, environment);
 
             /* 在实现evalReturnExpression时需要加判断 */
             if (result instanceof ReturnValue) {
@@ -132,10 +141,10 @@ public class Evaluator {
      * 但操作数一旦是嵌套表达式（!!true、-(-5)），它就是一个 PrefixExpression 节点，
      * 走不到任何分支、直接抛异常。正确姿势见下：先 right = eval(expression) 拿到 MonkeyObject，
      * 再按 operator 与对象类型分派。 */
-    private static MonkeyObject evalPrefixExpression(PrefixExpression prefixExpression){
+    private static MonkeyObject evalPrefixExpression(PrefixExpression prefixExpression, Environment environment){
         String operator = prefixExpression.operator();
         /* ↓这一行当时没想出来, 可能也加重了我按照AST判断的倾向, 需要先搞出右值 */
-        MonkeyObject right = eval(prefixExpression.expression());
+        MonkeyObject right = eval(prefixExpression.expression(), environment);
 
         if (operator.equals(TokenType.MINUS.literal())) {
             return evalMinusPrefixOperatorExpression(right);
@@ -206,10 +215,10 @@ public class Evaluator {
      *   - 剩下的 + - * / < > 只对整数有意义，一律返回 NULL。
      * 于是 null==null→true、null!=null→false、5==true→false、5!=true→true、true+true→null，
      * 全部和原书一致。 */
-    private static MonkeyObject evalInfixExpression(InfixExpression infixExpression){
+    private static MonkeyObject evalInfixExpression(InfixExpression infixExpression, Environment environment){
         /* 和前缀一样：先递归求值左右操作数，再按“对象类型 + 运算符”分派，不要看 AST 节点类型 */
-        MonkeyObject left = eval(infixExpression.left());
-        MonkeyObject right = eval(infixExpression.right());
+        MonkeyObject left = eval(infixExpression.left(), environment);
+        MonkeyObject right = eval(infixExpression.right(), environment);
         String operator = infixExpression.operator();
 
         /* 情况1：左右都是整数 → 整数运算（+ - * / < > == !=） */
@@ -270,15 +279,15 @@ public class Evaluator {
     }
 
     /* 对条件表达式求值 */
-    private static MonkeyObject evalIfExpression(IfExpression ifExpression){
+    private static MonkeyObject evalIfExpression(IfExpression ifExpression, Environment environment){
 
-        MonkeyObject conditionObject = eval(ifExpression.condition());
+        MonkeyObject conditionObject = eval(ifExpression.condition(), environment);
 
         boolean finalCondition = isTruthy(conditionObject);
 
         /* 如果condition==true, 对consequence求值 */
         if (finalCondition) {
-            return eval(ifExpression.consequence());
+            return eval(ifExpression.consequence(), environment);
         }
 
         /* 如果没有alternative, 直接返回 */
@@ -288,7 +297,7 @@ public class Evaluator {
         }
 
         /* 如果有alternative, 再求值 */
-        return eval(ifExpression.alternative());
+        return eval(ifExpression.alternative(), environment);
     }
 
     /* 判断ifExpression最终的条件表达式
@@ -317,11 +326,11 @@ public class Evaluator {
     }
 
     /* 对块语句求值 */
-    private static MonkeyObject evalBlockStatement(BlockStatement blockStatement) {
+    private static MonkeyObject evalBlockStatement(BlockStatement blockStatement, Environment environment) {
         MonkeyObject result = NullObject.NULL;
 
         for (Statement statement : blockStatement.statements()){
-            result = eval(statement);
+            result = eval(statement, environment);
 
             /* 在实现evalReturnExpression时需要加判断 */
             if (result instanceof ReturnValue) {
@@ -333,10 +342,22 @@ public class Evaluator {
     }
 
     /* 处理LetStatement */
-    /* 我记得此时该引入Environment了吧, 不然变量要往哪里存? */
-    /* 那稍后再说, 先来实现ReturnStatement */
-    private static MonkeyObject evalLetStatement(LetStatement letStatement){
-        return null;
+    /* 这个方法要求传入Environment, 而eval()需要调用它, 因此eval()也需要传入Environment, 所有调用eval()又会再次受到影响 */
+    private static MonkeyObject evalLetStatement(LetStatement letStatement, Environment environment){
+        String identifierName = letStatement.identifier().value();
+        MonkeyObject evaluated = eval(letStatement.expression(), environment);
+        environment.put(identifierName, evaluated);
+        return evaluated;
+    }
+
+    /* 啊我去, 漏了evalIdentifier了 */
+    private static MonkeyObject evalIdentifier(Identifier identifier, Environment environment){
+        if (environment.contains(identifier.value())){
+            return environment.get(identifier.value(), NullObject.NULL);
+        }
+        throw new IllegalStateException(String.format(
+                "Unknown identifier[type=%s, value=%s] in evalIdentifier()",
+                identifier.getClass().getName(), identifier.value()));
     }
 
     /* 对returnStatement求值 */
@@ -344,11 +365,11 @@ public class Evaluator {
     *
     * 1. 1; return 2; 3; 应该返回2
     * 2. if(10 > 1){ if(10 > 1){ return 1; }} return 2; 应该返回1 */
-    private static ReturnValue evalReturnStatement(ReturnStatement returnStatement){
+    private static ReturnValue evalReturnStatement(ReturnStatement returnStatement, Environment environment){
         /* 但是话又说回来了, 都到return了, 还怎么控制之前有没有return, 让我看看书上怎么实现的
          * 啊, 要定义一个returnValue, 还要改造evalProgram(我没有这个函数, 不考虑), evalBlockStatement, evalStatements
          * 只要有循环对statement求值, 就在循环中检测这是不是个returnObject, 是就提前返回 */
-        MonkeyObject returnedObject = eval(returnStatement.returnExpression());
+        MonkeyObject returnedObject = eval(returnStatement.returnExpression(), environment);
         ReturnValue returnValue = new ReturnValue(returnedObject);
         return returnValue;
     }
