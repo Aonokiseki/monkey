@@ -5,6 +5,7 @@ public enum ObjectType {
     INTEGER("INTEGER"),
     BOOLEAN("BOOLEAN"),
     NULL("NULL"),
+    FUNCTION("FUNCTION")
     ;
 
 

@@ -94,6 +94,14 @@ public class Evaluator {
             return evalIdentifier((Identifier) node, environment);
         }
 
+        if (node instanceof FunctionExpression){
+            return evalFunctionExpression((FunctionExpression) node, environment);
+        }
+
+        if (node instanceof CallExpression) {
+            return evalCallFunction((CallExpression)node, environment);
+        }
+
 
         /* 没必要执行如下判断:
          * node instanceof Expression
@@ -372,6 +380,88 @@ public class Evaluator {
         MonkeyObject returnedObject = eval(returnStatement.returnExpression(), environment);
         ReturnValue returnValue = new ReturnValue(returnedObject);
         return returnValue;
+    }
+
+    /* 对函数表达式以及调用表达式求值 */
+    /* 考虑几种情况:
+     * ① let a = 7; fn(x,y,z){x + a; y + 2 * a; z + 3 * a;}; return fn(0,0,1) + 1; 预期结果是23
+     *
+     * ② fn(x){if (x > 0) {return true;} return false; }; return !fn(-1); 预期是true
+     *
+     * ③ let a = 1 fn(){return -a;}; fn(); 预期是-1
+     *
+     * ④fn(x, y, z){}; return fn(0,0,0); 预期是NULL
+     *
+     * ⑤let c = 3; fn(x){return x * 2 + c;} let b = 1; return fn(2) + b; 预期8
+     *
+     */
+    private static MonkeyObject evalFunctionExpression(FunctionExpression functionExpression, Environment environment){
+        /* 重新翻了一遍书, 大开眼界, 大概是这样的:
+         * 在对函数定义的求值, 就是将抽象语法树捆绑上当前的Environment, 将这个整体视为一个函数体对象, 返回就可以
+         * 不需要其它操作.
+         *
+         * 这就解决了我卡在这里的疑问: 那就是没有调用, 什么时候准备局部变量表, 什么时候将这些形参注册到局部变量表中,
+         * 又要如何将局部变量表传递给调用方, 又要如何让调用方知道局部变量表的顺序(你瞧, 这毕竟是两个函数)
+         *
+         * 书上告诉我, 对定义的求值, 就是不处理, 一股脑丢给callFunction就可以了
+         * 先定义FunctionObject
+         *
+         * emmm, 名为求值, 实际上还在定义
+         * */
+        return new FunctionObject(functionExpression, environment);
+    }
+
+    /* ==================== 调用表达式求值·踩坑记录 ====================
+     * 【最重要的坑：两个 environment 弄反了】
+     * 调用函数涉及两个环境，极易 swap：
+     *   1. 实参(argument)是“调用处”写出的表达式 → 必须在【调用方环境 environment】里求值。
+     *   2. 局部变量表的 outer（闭包往外看的出口）→ 必须是【定义时环境 functionObject.environment()】，
+     *      这样函数体才能看见它定义处的变量（闭包）。
+     * 我第一次实现把这两处用反了：实参用定义环境、局部表 outer 用调用方环境。
+     * 因为当时 5 个用例里函数都在顶层定义、也在顶层调用，两个环境恰好相同，swap 完全测不出来——
+     * 直到补了闭包用例 `let newAdder = fn(x){fn(y){x+y;}}; let addTwo=newAdder(2); addTwo(2);`
+     * 才暴露出 addTwo(2) 找不到 x（x 在 addTwo 的定义环境里，而我把局部表 outer 设成了调用方顶层）。
+     * 教训：两个语义不同的 environment 别共用同一个模糊身份；写之前先分清“实参在谁家求值、函数体往谁家找”。
+     *
+     * 【ReturnValue 要在函数边界解包】
+     * 函数体里的 return 会让 eval(body) 返回 ReturnValue 包装，必须 unwrap 再交给调用方，
+     * 否则 !fn(...) 拿到的是 ReturnValue 而不是 Boolean。程序顶层解包过一次，函数边界是第二个解包点。 */
+    private static MonkeyObject evalCallFunction(CallExpression callExpression, Environment environment){
+        /* 在【调用方】环境里求值“被调用的函数表达式”，得到 FunctionObject */
+        MonkeyObject fo = eval(callExpression.function(), environment);
+        if (!(fo instanceof FunctionObject)){
+            throw new IllegalStateException(String.format(
+                    "fo[type=%s] in not instance of FunctionObject in evalCallFunction()", fo.getClass().getName()));
+        }
+        FunctionObject functionObject = (FunctionObject) fo;
+        List<Identifier> identifiers = functionObject.functionExpression().parameters();
+
+        /* 局部变量表的 outer = 定义时环境（闭包靠它往外看）；实参稍后在调用方环境求值 */
+        Environment localVariableTable = new Environment(functionObject.environment());
+
+        List<Expression> arguments = callExpression.arguments();
+        MonkeyObject argumentExpression = NullObject.NULL;
+
+        if (arguments.size() != identifiers.size()){
+            throw new IllegalStateException(String.format(
+                    "arguments.size(%d) not equal identifiers.size(%d), while arguments=[%s], identifiers=[%s]",
+                    arguments.size(), identifiers.size(), arguments, identifiers));
+        }
+
+        for (int i = 0; i < arguments.size(); i++){
+            Expression argument = arguments.get(i);
+            /* 实参在【调用方】环境求值 */
+            argumentExpression = eval(argument, environment);
+            /* 形参名 → 实参值，绑进局部变量表 */
+            localVariableTable.put(identifiers.get(i).value(), argumentExpression);
+        }
+
+        /* 在局部变量表（含定义时 outer）里求值函数体，并解包 ReturnValue */
+        MonkeyObject monkeyObject = eval(functionObject.functionExpression().body(), localVariableTable);
+        if (monkeyObject instanceof ReturnValue){
+            return ((ReturnValue)(monkeyObject)).value();
+        }
+        return monkeyObject;
     }
 }
 

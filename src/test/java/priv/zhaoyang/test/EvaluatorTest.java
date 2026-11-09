@@ -106,27 +106,12 @@ public class EvaluatorTest {
     /* 直接对 null 节点求值：eval 的 null 防御应返回 NullObject.NULL 而非抛异常 */
     @Test
     public void testEvalNullNodeReturnsNullObject(){
-        Assert.assertSame(Evaluator.eval(null, new Environment()), NullObject.NULL);
-    }
-
-    /* ==================== 边界：未实现的节点“大声失败” ====================
-     * 当前只实现 IntegerLiteral/BooleanLiteral 求值，其余节点求值会抛 IllegalStateException。
-     * 用测试锁住这个“有意为之”的行为；后续实现对应分支时，删除对应行即可。 */
-    @DataProvider(name = "testEvalUnsupportedNodeDataProvider")
-    private Object[][] testEvalUnsupportedNodeDataProvider(Method method){
-        return new Object[][]{
-                new Object[]{"x"},       /* Identifier */
-        };
-    }
-
-    @Test(dataProvider = "testEvalUnsupportedNodeDataProvider")
-    public void testEvalUnsupportedNodeThrows(String input){
-        Assert.expectThrows(IllegalStateException.class, () -> testProgram(input));
+        Assert.assertSame(Evaluator.eval(null, new Environment(null)), NullObject.NULL);
     }
 
     /* ==================== 辅助方法 ==================== */
     private static MonkeyObject testProgram(String input){
-        return testProgram(input, new Environment());
+        return testProgram(input, new Environment(null));
     }
 
     private static MonkeyObject testProgram(String input, Environment environment){
@@ -466,7 +451,7 @@ public class EvaluatorTest {
 
     @Test(dataProvider = "testEvalLetStatementDataProvider")
     public void testEvalLetStatement(String input, MonkeyObject expected){
-        Environment environment = new Environment();
+        Environment environment = new Environment(null);
         MonkeyObject actual = testProgram(input, environment);
         compare(actual, expected);
     }
@@ -494,7 +479,41 @@ public class EvaluatorTest {
             Assert.assertTrue(expected instanceof NullObject);
 
         } else {
+            /* 如果遇到FunctionObject也应该报错 */
+
             Assert.fail("Invalid actual type: " + actual.getClass().getName());
         }
+    }
+
+    @DataProvider(name = "testEvalFunctionExpressionDataProvider")
+    public Object[][] testEvalFunctionExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"let a = 7; let func = fn(x,y,z){x + a; y + 2 * a; return z + 3 * a;}; return func(0,0,1) + 1;", new IntegerObject(23)},
+                new Object[]{"let func = fn(x){if (x > 0) {return true;} return false; }; return !func(-1);", BooleanObject.TRUE},
+                new Object[]{"let a = 1; let f = fn(){return -a;}; f();", new IntegerObject(-1)},
+                new Object[]{"let f = fn(x, y, z){}; return f(0,0,0);", NullObject.NULL},
+                new Object[]{"let c = 3; let f = fn(x){return x * 2 + c;} let b = 1; return f(2) + b;",new IntegerObject(8)},
+                /* 闭包：函数返回函数，捕获定义时的 x */
+                new Object[]{"let newAdder = fn(x) { fn(y) { x + y; }; }; let addTwo = newAdder(2); addTwo(2);", new IntegerObject(4)},
+                /* 递归：函数体通过闭包引用自身 */
+                new Object[]{"let fact = fn(n) { if (n == 0) { 1 } else { n * fact(n - 1); } }; fact(5);", new IntegerObject(120)},
+                /* 高阶函数：函数作为参数 */
+                new Object[]{"let apply = fn(f, x) { f(x); }; let double = fn(n) { n * 2; }; apply(double, 5);", new IntegerObject(10)},
+                /* 闭包：inner 捕获定义时的 x=5，实参 y 取自调用方（顶层 y=100）→ 100 + 5 = 105
+                 * 注：此例主要验证"闭包捕获 x"，不严格验证"实参在调用方求值"——
+                 * 因为 y 也能通过 inner 的定义链（外层=顶层）找到 y=100。
+                 * 真正戳"实参在调用方求值"的是下面 add/outer 那条。 */
+                new Object[]{"let make = fn() { let x = 5; fn(y) { y + x; }; }; let inner = make(); let y = 100; inner(y);", new IntegerObject(105)},
+                /* 实参必须在【调用方】求值：add 定义在顶层（无 x），却在 outer 的局部作用域里被调用，
+                 * 实参 x 只能从 outer 的局部环境(x=5)取；若从 add 的定义环境(顶层无 x)取就会崩。 */
+                new Object[]{"let add = fn(a, b) { a + b; }; let outer = fn() { let x = 5; add(x, 10); }; outer();", new IntegerObject(15)},
+        };
+    }
+
+    @Test(dataProvider = "testEvalFunctionExpressionDataProvider")
+    public void testEvalFunctionExpression(String input, MonkeyObject expected){
+        Environment environment = new Environment(null);
+        MonkeyObject actual = testProgram(input, environment);
+        compare(actual, expected);
     }
 }
