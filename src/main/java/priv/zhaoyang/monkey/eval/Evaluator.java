@@ -102,6 +102,10 @@ public class Evaluator {
             return evalCallFunction((CallExpression)node, environment);
         }
 
+        if (node instanceof WhileExpression){
+            return evalWhileExpression((WhileExpression) node, environment);
+        }
+
 
         /* 没必要执行如下判断:
          * node instanceof Expression
@@ -462,6 +466,30 @@ public class Evaluator {
             return ((ReturnValue)(monkeyObject)).value();
         }
         return monkeyObject;
+    }
+
+    /* 解析循环表达式 */
+    private static MonkeyObject evalWhileExpression(WhileExpression whileExpression, Environment environment){
+
+        MonkeyObject result = NullObject.NULL;
+        while(true){
+
+            MonkeyObject conditionObject = eval(whileExpression.condition(), environment);
+
+            /* 啥, 我画蛇添足了, 没必要断言它一定得是BooleanObject, isTruthy已经囊括了所有可能! */
+            boolean isTruth = isTruthy(conditionObject);
+            if (!isTruth){
+                break;
+            }
+
+            result = eval(whileExpression.body(), environment);
+
+            /* 再吃一堑, 再看看能不能张一智, 循环体内遇到return的情况 */
+            if (result instanceof ReturnValue) {
+                return ((ReturnValue) result).value();
+            }
+        }
+        return result;
     }
 }
 

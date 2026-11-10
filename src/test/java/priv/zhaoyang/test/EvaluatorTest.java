@@ -516,4 +516,42 @@ public class EvaluatorTest {
         MonkeyObject actual = testProgram(input, environment);
         compare(actual, expected);
     }
+
+    @DataProvider(name = "testEvalWhileExpressionDataProvider")
+    private Object[][] testEvalWhileExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{
+                        "let a = 1; while(a < 10){let a = a + 1;}; return a;",
+                        new IntegerObject(10)},
+                /* 我擦, 丢人了啊, 自己算的不如自己写的解释器算的对...还得靠现场写一段java来验证解释器算的是对的 */
+                new Object[]{
+                        "let truth = true; let a = 1; while(truth) {let b = a; let a = a + b; if (b > 5) {let truth = false;}} return a;",
+                        new IntegerObject(16)},
+                /* 计数 */
+                new Object[]{"let i = 0; while (i < 3) { let i = i + 1; } i;", new IntegerObject(3)},
+                /* 累加 */
+                new Object[]{"let i = 0; let sum = 0; while (i < 5) { let sum = sum + i; let i = i + 1; } sum;", new IntegerObject(10)},
+                /* 条件一开始就为假，循环体不执行 → NULL */
+                new Object[]{"while (false) { 1; }", NullObject.NULL},
+                /* 倒计数 */
+                new Object[]{"let i = 5; while (i > 0) { let i = i - 1; } i;", new IntegerObject(0)},
+                /* 循环体内 return 直接跳出 */
+                new Object[]{"while (true) { return 42; }", new IntegerObject(42)},
+                /* 布尔变量做开关 */
+                new Object[]{"let flag = true; while (flag) { let flag = false; } flag;", BooleanObject.FALSE},
+                /* 嵌套循环 */
+                new Object[]{"let i = 0; let count = 0; while (i < 3) { let j = 0; while (j < 3) { let count = count + 1; let j = j + 1; } let i = i + 1; } count;", new IntegerObject(9)},
+                /* 真值性：整数 1 为真，应进入循环 */
+                new Object[]{"while (1) { return 42; }", new IntegerObject(42)},
+                /* 真值性：null 为假，应不进入循环 */
+                new Object[]{"while (-false) { 1; }", NullObject.NULL},
+        };
+    }
+
+    @Test(dataProvider = "testEvalWhileExpressionDataProvider")
+    public void testEvalWhileExpression(String input, MonkeyObject expected){
+        Environment environment = new Environment(null);
+        MonkeyObject actual = testProgram(input, environment);
+        compare(actual, expected);
+    }
 }
