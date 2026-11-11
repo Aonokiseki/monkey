@@ -8,7 +8,7 @@ public enum Precedence {
     SUM(4),
     PRODUCT(5),
     PREFIX(6),
-    CALL(7)
+    CALL(7),
     ;
 
     private int value;

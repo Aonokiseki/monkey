@@ -7,6 +7,7 @@ public enum TokenType {
     /* 标识符 */
     IDENT("IDENT"), //比如变量名
     INT("INT"), //数字
+    STRING("STRING"),
 
     /* 运算符 */
     ASSIGN("="),

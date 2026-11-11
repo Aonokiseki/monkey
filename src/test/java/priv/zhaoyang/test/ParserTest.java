@@ -812,4 +812,58 @@ public class ParserTest {
         Assert.assertTrue(statements.get(0) instanceof ReturnStatement, "statement is not ReturnStatement");
         return (ReturnStatement) statements.get(0);
     }
+
+    @Test
+    public void testParseStringLiteral(){
+        String input = "let str = \"Monkey\"; let str_two = \"Lang\";";
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+
+        List<StringLiteral> stringLiterals = Arrays.asList(
+                new StringLiteral(new Token(TokenType.STRING, "Monkey")),
+                new StringLiteral(new Token(TokenType.STRING, "Lang"))
+        );
+        Assert.assertEquals(statements.size(), stringLiterals.size());
+
+        for(int i = 0; i < statements.size(); i++){
+            Statement statement = statements.get(i);
+            if (!(statement instanceof LetStatement)){
+                Assert.fail("statement is not instance of ExpressionStatement");
+            }
+            LetStatement letStatement = (LetStatement) statement;
+            Expression expression = letStatement.expression();
+            if (!(expression instanceof StringLiteral)){
+                Assert.fail("expression is not instance of StringLiteral");
+            }
+            StringLiteral stringLiteral = (StringLiteral) expression;
+            Assert.assertEquals(stringLiteral.value(), stringLiterals.get(i).value());
+        }
+    }
+
+    @DataProvider(name = "stringLiteralExpressionDataProvider")
+    public Object[][] stringLiteralExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"\"hello world\";", "hello world"},
+                new Object[]{"\"Monkey\";", "Monkey"},
+                new Object[]{"\"\";", ""},
+        };
+    }
+
+    @Test(dataProvider = "stringLiteralExpressionDataProvider")
+    public void testStringLiteralExpression(String input, String expectedValue){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        ExpressionStatement statement = (ExpressionStatement) program.statements().get(0);
+        Expression expression = statement.expression();
+        Assert.assertTrue(expression instanceof StringLiteral, "expression is not StringLiteral");
+        StringLiteral stringLiteral = (StringLiteral) expression;
+        Assert.assertEquals(stringLiteral.value(), expectedValue);
+    }
 }

@@ -107,6 +107,10 @@ public class Lexer {
             case '}':
                 return new Token(TokenType.RBRACE, "}");
 
+            case '"':
+                String stringLiteral = readString();
+                return new Token(TokenType.STRING, stringLiteral);
+
             case 0:
                 return new Token(TokenType.EOF, "");
 
@@ -185,6 +189,19 @@ public class Lexer {
         boolean isUpper = ch >= 'A' && ch <= 'Z';
         boolean isBottom = ch == '_';
         return isLower || isUpper || isBottom;
+    }
+
+    /* 读取字符串 */
+    private String readString(){
+        StringBuilder sb = new StringBuilder();
+
+        char ch = readChar();
+        /* 特殊情况: \" 转义符先不考虑支持 */
+        while (ch != '"' && ch != 0){
+            sb.append(ch);
+            ch = readChar();
+        }
+        return sb.toString();
     }
 
 }

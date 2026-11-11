@@ -473,12 +473,22 @@ public class EvaluatorTest {
             }
             BooleanObject expectBooleanObject = (BooleanObject) expected;
             BooleanObject booleanObject = (BooleanObject) actual;
-            Assert.assertEquals(booleanObject, expectBooleanObject);
+            Assert.assertEquals(booleanObject.value(), expectBooleanObject.value());
 
         } else if (actual instanceof NullObject) {
             Assert.assertTrue(expected instanceof NullObject);
 
-        } else {
+        } else if (actual instanceof StringObject) {
+
+            if (!(expected instanceof StringObject)){
+                Assert.fail("expected is ot instance of StringObject");
+            }
+            StringObject expectedStringObject = (StringObject) expected;
+            StringObject stringObject = (StringObject) actual;
+            Assert.assertEquals(stringObject.value(), expectedStringObject.value());
+        }
+
+        else {
             /* 如果遇到FunctionObject也应该报错 */
 
             Assert.fail("Invalid actual type: " + actual.getClass().getName());
@@ -550,6 +560,31 @@ public class EvaluatorTest {
 
     @Test(dataProvider = "testEvalWhileExpressionDataProvider")
     public void testEvalWhileExpression(String input, MonkeyObject expected){
+        Environment environment = new Environment(null);
+        MonkeyObject actual = testProgram(input, environment);
+        compare(actual, expected);
+    }
+
+    @DataProvider(name = "testEvalStringDataProvider")
+    public Object[][] testEvalStringDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{
+                        "let str = \"Monkey\"; if (2 > 1) {let str = \"Monkey1\"} return str;",
+                        new StringObject("Monkey1")
+                },
+                new Object[]{
+                        "let str = \"Monkey,\"; let str_two = \" Lang\"; if (true) {let str = str + str_two;}; return str;",
+                        new StringObject("Monkey, Lang")
+                },
+                new Object[]{"\"Hello World!\"", new StringObject("Hello World!")},
+                new Object[]{"\"Hello\" + \" \" + \"World!\"", new StringObject("Hello World!")},
+                new Object[]{"let a = \"foo\"; let b = \"bar\"; a + b;", new StringObject("foobar")},
+                new Object[]{"\"\" + \"\"", new StringObject("")},
+        };
+    }
+
+    @Test(dataProvider = "testEvalStringDataProvider")
+    public void testEvalString(String input, MonkeyObject expected){
         Environment environment = new Environment(null);
         MonkeyObject actual = testProgram(input, environment);
         compare(actual, expected);

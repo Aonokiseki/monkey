@@ -67,6 +67,7 @@ public class Parser {
         registerPrefix(TokenType.IF, this::parseIfExpression);
         registerPrefix(TokenType.FUNCTION, this::parseFunctionExpression);
         registerPrefix(TokenType.WHILE, this::parseWhileExpression);
+        registerPrefix(TokenType.STRING, this::parseStringLiteral);
 
         /* 中缀注册 */
         registerInfix(TokenType.PLUS, this::parseInfixExpression);
@@ -705,4 +706,9 @@ public class Parser {
         return callExpression;
     }
 
+    /* 解析字符串字面量 */
+    private StringLiteral parseStringLiteral(){
+        StringLiteral stringLiteral = new StringLiteral(current);
+        return stringLiteral;
+    }
 }

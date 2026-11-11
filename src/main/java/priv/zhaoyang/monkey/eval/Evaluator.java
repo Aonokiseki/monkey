@@ -106,6 +106,10 @@ public class Evaluator {
             return evalWhileExpression((WhileExpression) node, environment);
         }
 
+        if (node instanceof StringLiteral) {
+            return evalStringLiteral((StringLiteral) node, environment);
+        }
+
 
         /* 没必要执行如下判断:
          * node instanceof Expression
@@ -247,6 +251,13 @@ public class Evaluator {
         /* 情况3：!= 同理，取反 */
         if (operator.equals(TokenType.NOT_EQ.literal())) {
             return left != right ? BooleanObject.TRUE : BooleanObject.FALSE;
+        }
+
+        /* 真·情况4: 连接字符串 */
+        if (left instanceof StringObject && right instanceof StringObject && operator.equals(TokenType.PLUS.literal())){
+            StringObject leftObject = (StringObject) left;
+            StringObject rightObject = (StringObject) right;
+            return new StringObject(leftObject.value() + rightObject.value());
         }
 
         /* 情况4：剩下的 + - * / < > 只对整数有意义，其它类型一律 NULL（原书语义） */
@@ -490,6 +501,12 @@ public class Evaluator {
             }
         }
         return result;
+    }
+
+    /* 对字符串求值 */
+    /* 不考虑字符串常量池, 永远new一个出来 */
+    private static MonkeyObject evalStringLiteral(StringLiteral stringLiteral, Environment environment){
+        return new StringObject(stringLiteral.value());
     }
 }
 

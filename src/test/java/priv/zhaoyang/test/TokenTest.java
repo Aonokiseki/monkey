@@ -150,10 +150,52 @@ public class TokenTest {
 
         for (Token expected : expectedTokens) {
             Token actual = lexer.nextToken();
-//            String log = String.format("actual=[%s], expected=[%s]", actual, expected);
-//            System.out.println(log);
             Assert.assertEquals(actual.literal, expected.literal);
             Assert.assertEquals(actual.type, expected.type);
         }
+    }
+
+    @Test
+    public void testStringToken(){
+        String input = "let str = \"Monkey\"; let str_two = \"Lang\";";
+        Token[] expectedTokens = new Token[]{
+                new Token(TokenType.LET, "let"),
+                new Token(TokenType.IDENT, "str"),
+                new Token(TokenType.ASSIGN, "="),
+                new Token(TokenType.STRING, "Monkey"),
+                new Token(TokenType.SEMICOLON, ";"),
+                new Token(TokenType.LET, "let"),
+                new Token(TokenType.IDENT, "str_two"),
+                new Token(TokenType.ASSIGN, "="),
+                new Token(TokenType.STRING, "Lang"),
+                new Token(TokenType.SEMICOLON, ";"),
+        };
+
+        Lexer lexer = new Lexer(input);
+
+        for (Token expected : expectedTokens){
+            Token actual = lexer.nextToken();
+            Assert.assertEquals(actual.literal, expected.literal);
+            Assert.assertEquals(actual.type, expected.type);
+        }
+    }
+
+    @DataProvider(name = "testStringTokensDataProvider")
+    public Object[][] testStringTokensDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"\"\"", new Token(TokenType.STRING, "")},
+                new Object[]{"\"foo bar\"", new Token(TokenType.STRING, "foo bar")},
+                new Object[]{"\"a + b\"", new Token(TokenType.STRING, "a + b")},
+                new Object[]{"\"let\"", new Token(TokenType.STRING, "let")},
+                new Object[]{"\"123\"", new Token(TokenType.STRING, "123")},
+        };
+    }
+
+    @Test(dataProvider = "testStringTokensDataProvider")
+    public void testStringTokens(String input, Token expected){
+        Lexer lexer = new Lexer(input);
+        Token actual = lexer.nextToken();
+        Assert.assertEquals(actual.literal, expected.literal);
+        Assert.assertEquals(actual.type, expected.type);
     }
 }
