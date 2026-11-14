@@ -1,5 +1,6 @@
 package priv.zhaoyang.test;
 
+import com.sun.jdi.BooleanValue;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -11,6 +12,7 @@ import priv.zhaoyang.monkey.object.*;
 import priv.zhaoyang.monkey.parser.Parser;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 
 public class EvaluatorTest {
@@ -488,6 +490,22 @@ public class EvaluatorTest {
             Assert.assertEquals(stringObject.value(), expectedStringObject.value());
         }
 
+        else if (actual instanceof ArrayObject) {
+
+            ArrayObject actualArrayObject = (ArrayObject) actual;
+
+            if (!(expected instanceof ArrayObject)){
+                Assert.fail(String.format("expected[type=%s] is not instance of ArrayObject", expected.getClass().getName()));
+            }
+
+            ArrayObject expectedArrayObject = (ArrayObject) expected;
+            Assert.assertEquals(actualArrayObject.values().size(), expectedArrayObject.values().size());
+            /* 递归比较每个元素，自动覆盖 Integer/Boolean/String/Null/嵌套数组 */
+            for (int j = 0; j < actualArrayObject.values().size(); j++){
+                compare(actualArrayObject.values().get(j), expectedArrayObject.values().get(j));
+            }
+        }
+
         else {
             /* 如果遇到FunctionObject也应该报错 */
 
@@ -585,6 +603,119 @@ public class EvaluatorTest {
 
     @Test(dataProvider = "testEvalStringDataProvider")
     public void testEvalString(String input, MonkeyObject expected){
+        Environment environment = new Environment(null);
+        MonkeyObject actual = testProgram(input, environment);
+        compare(actual, expected);
+    }
+
+    @DataProvider(name = "testEvalArrayLiteralDataProvider")
+    public Object[][] testEvalArrayLiteralDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{
+                    "let a = [1,2,3];",
+                    new ArrayObject(Arrays.asList(
+                            new IntegerObject(1),
+                            new IntegerObject(2),
+                            new IntegerObject(3)
+                    ))
+                },
+                new Object[]{
+                        "let a = [[1,2],[3,4],[5,6]];",
+                        new ArrayObject(Arrays.asList(
+                                new ArrayObject(
+                                        Arrays.asList(
+                                                new IntegerObject(1), new IntegerObject(2)
+                                        )
+                                ),
+                                new ArrayObject(
+                                        Arrays.asList(
+                                                new IntegerObject(3), new IntegerObject(4)
+                                        )
+                                ),
+                                new ArrayObject(
+                                        Arrays.asList(
+                                                new IntegerObject(5), new IntegerObject(6)
+                                        )
+                                )
+                        ))
+                },
+                new Object[]{
+                        "let a = [];",
+                        new ArrayObject(Arrays.asList())
+                },
+                new Object[]{
+                        "let a = [1 + 2, 3 * 4];",
+                        new ArrayObject(Arrays.asList(
+                                new IntegerObject(3),
+                                new IntegerObject(12)
+                        ))
+                },
+                new Object[]{
+                        "let a = [true, false];",
+                        new ArrayObject(Arrays.asList(
+                                BooleanObject.TRUE,
+                                BooleanObject.FALSE
+                        ))
+                },
+                new Object[]{
+                        "let a = [1, true, \"foo\"];",
+                        new ArrayObject(Arrays.asList(
+                                new IntegerObject(1),
+                                BooleanObject.TRUE,
+                                new StringObject("foo")
+                        ))
+                },
+                new Object[]{
+                        "let a = [[1, 2], [true, false], [\"x\", \"y\"]];",
+                        new ArrayObject(Arrays.asList(
+                                new ArrayObject(Arrays.asList(new IntegerObject(1), new IntegerObject(2))),
+                                new ArrayObject(Arrays.asList(BooleanObject.TRUE, BooleanObject.FALSE)),
+                                new ArrayObject(Arrays.asList(new StringObject("x"), new StringObject("y")))
+                        ))
+                },
+        };
+    }
+
+    @Test(dataProvider = "testEvalArrayLiteralDataProvider")
+    public void testEvalArrayLiteral(String input, ArrayObject arrayObject){
+        Environment environment = new Environment(null);
+        MonkeyObject result = testProgram(input, environment);
+        compare(result, arrayObject);
+    }
+
+    @DataProvider(name = "testEvalIndexExpressionDataProvider")
+    public Object[][] testEvalIndexExpressionDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"let a = [1,2,3]; return a[1];", new IntegerObject(2)},
+                new Object[]{"return [4,5,6][2];", new IntegerObject(6)},
+
+                /* emmm...好像不支持循环赋值, 追加的方法好像也没实现...
+                 * 而且 a[i] = 1 这好像是在解析时求值, 那算了
+                 * 这么来看, 这语言的洞还真是不少啊 */
+//                new Object[]{"let a = []; let i = 0; while (i < 3) {let a[i] = i; let i = i + 1;}; return a[2]", new IntegerObject(3)},
+
+                new Object[]{"let returnTwo = fn(){return [2,3];}; let a = [1, returnTwo(), [4,5,6]]; return a[1][1];", new IntegerObject(3)},
+                new Object[]{"let returnTwo = fn(){return [2,3];}; let a = [1, returnTwo(), [4,5,6]]; return a[2][2] == 6;", BooleanObject.TRUE},
+                /* 原书 TestArrayIndexExpressions */
+                new Object[]{"[1, 2, 3][0]", new IntegerObject(1)},
+                new Object[]{"[1, 2, 3][1]", new IntegerObject(2)},
+                new Object[]{"[1, 2, 3][2]", new IntegerObject(3)},
+                new Object[]{"let i = 0; [1][i];", new IntegerObject(1)},
+                new Object[]{"[1, 2, 3][1 + 1];", new IntegerObject(3)},
+                new Object[]{"let myArray = [1, 2, 3]; myArray[2];", new IntegerObject(3)},
+                new Object[]{"let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];", new IntegerObject(6)},
+                new Object[]{"let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i];", new IntegerObject(2)},
+                /* 越界 / 负数下标 → 原书返回 NULL */
+                new Object[]{"[1, 2, 3][3]", NullObject.NULL},
+                new Object[]{"[1, 2, 3][-1]", NullObject.NULL},
+                /* 嵌套索引 */
+                new Object[]{"[[1, 2], [3, 4]][1][0]", new IntegerObject(3)},
+                new Object[]{"[[1, 2], [3, 4]][1][1]", new IntegerObject(4)},
+        };
+    }
+
+    @Test(dataProvider = "testEvalIndexExpressionDataProvider")
+    public void testEvalIndexExpression(String input, MonkeyObject expected){
         Environment environment = new Environment(null);
         MonkeyObject actual = testProgram(input, environment);
         compare(actual, expected);

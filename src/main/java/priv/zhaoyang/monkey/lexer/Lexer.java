@@ -107,6 +107,12 @@ public class Lexer {
             case '}':
                 return new Token(TokenType.RBRACE, "}");
 
+            case '[':
+                return new Token(TokenType.LBRACKETS, "[");
+
+            case ']':
+                return new Token(TokenType.RBRACKETS, "]");
+
             case '"':
                 String stringLiteral = readString();
                 return new Token(TokenType.STRING, stringLiteral);

@@ -6,6 +6,7 @@ public enum ObjectType {
     BOOLEAN("BOOLEAN"),
     NULL("NULL"),
     STRING("STRING"),
+    ARRAY("ARRAY"),
     FUNCTION("FUNCTION"),
     ;
 

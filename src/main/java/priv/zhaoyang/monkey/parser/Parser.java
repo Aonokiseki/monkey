@@ -27,6 +27,8 @@ package priv.zhaoyang.monkey.parser;
       4.10: 函数表达式
       4.11: while表达式, 拓展原书没有的拓展
       4.12: 调用表达式
+      4.13: 定义数组
+      4.14: 数组索引
  * */
 
 
@@ -68,6 +70,7 @@ public class Parser {
         registerPrefix(TokenType.FUNCTION, this::parseFunctionExpression);
         registerPrefix(TokenType.WHILE, this::parseWhileExpression);
         registerPrefix(TokenType.STRING, this::parseStringLiteral);
+        registerPrefix(TokenType.LBRACKETS, this::parseArrayLiteral);
 
         /* 中缀注册 */
         registerInfix(TokenType.PLUS, this::parseInfixExpression);
@@ -79,6 +82,7 @@ public class Parser {
         registerInfix(TokenType.LT, this::parseInfixExpression);
         registerInfix(TokenType.GT, this::parseInfixExpression);
         registerInfix(TokenType.LPAREN, this::parseCallExpression);
+        registerInfix(TokenType.LBRACKETS, this::parseIndexExpression);
 
         /* 连续执行2次moveNext, 让current和next都有指向的对象 */
         moveNext();
@@ -710,5 +714,63 @@ public class Parser {
     private StringLiteral parseStringLiteral(){
         StringLiteral stringLiteral = new StringLiteral(current);
         return stringLiteral;
+    }
+
+    /* 解析数组字面量 [1,2,3] */
+    /* 又是表达式列表, 注意第一个元素从循环外拿出来 */
+    private ArrayLiteral parseArrayLiteral(){
+        ArrayLiteral arrayLiteral = new ArrayLiteral(current);
+
+        /* 空数组的情况 */
+        if (next.type == TokenType.RBRACKETS){
+            moveNext();
+            return arrayLiteral.putExpressionList(Collections.emptyList());
+        }
+        /* 非空的情况 */
+        moveNext();
+
+        List<Expression> expressions = new ArrayList<>();
+        Expression first = parseExpression(Precedence.LOWEST);
+        expressions.add(first);
+
+        while(next.type == TokenType.COMMA){
+            moveNext();
+            moveNext();
+            Expression expression = parseExpression(Precedence.LOWEST);
+            expressions.add(expression);
+        }
+
+        arrayLiteral.putExpressionList(expressions);
+
+        if (next.type != TokenType.RBRACKETS){
+            peekError(TokenType.RBRACKETS);
+            return null;
+        }
+        moveNext();
+
+        return arrayLiteral;
+    }
+
+    /* 解析索引表达式
+     * 它是个中缀, 也就是扫描到‘[’时, 一定将target解析完了
+     *
+     */
+    private IndexExpression parseIndexExpression(Expression target){
+        IndexExpression indexExpression = new IndexExpression(current);
+        indexExpression.putTarget(target);
+
+        /* 这里是不是还要考虑a[]这种不写索引值的情况?
+         * 没必要, 直接moveNext就行, 不管下一位是不是], 都想当作表达式来解析, 遇到错误, 也就是这种没有索引的情况
+         * 直接就报错了 */
+        moveNext();
+
+        Expression index = parseExpression(Precedence.LOWEST);
+        indexExpression.putIndex(index);
+
+        if (!expectPeek(TokenType.RBRACKETS)){
+            return null;
+        }
+
+        return indexExpression;
     }
 }

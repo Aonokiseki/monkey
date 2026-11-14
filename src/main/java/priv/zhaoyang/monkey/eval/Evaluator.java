@@ -4,12 +4,21 @@ import priv.zhaoyang.monkey.ast.*;
 import priv.zhaoyang.monkey.object.*;
 import priv.zhaoyang.monkey.token.TokenType;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /* 求值, 目标:
  * 1.IntegerLiteral求值
  * 2.BooleanLiteral求值
  * 3.前缀表达式
+ * 4.中缀表达式
+ * 5.if表达式
+ * 6.return语句求值
+ * 7.let语句求值
+ * 8.函数和表达式求值
+ * 9.while循环表达式求值
+ * 10.字符串拼接
+ * 11.数组定义和索引求值
  *  */
 public class Evaluator {
 
@@ -108,6 +117,14 @@ public class Evaluator {
 
         if (node instanceof StringLiteral) {
             return evalStringLiteral((StringLiteral) node, environment);
+        }
+
+        if (node instanceof ArrayLiteral) {
+            return evalArrayLiteral((ArrayLiteral) node, environment);
+        }
+
+        if (node instanceof IndexExpression) {
+            return evalIndexArrayLiteral((IndexExpression) node, environment);
         }
 
 
@@ -507,6 +524,52 @@ public class Evaluator {
     /* 不考虑字符串常量池, 永远new一个出来 */
     private static MonkeyObject evalStringLiteral(StringLiteral stringLiteral, Environment environment){
         return new StringObject(stringLiteral.value());
+    }
+
+    /* 对数组求值 */
+    /* 这还是定义 */
+    private static MonkeyObject evalArrayLiteral(ArrayLiteral arrayLiteral, Environment environment){
+        List<MonkeyObject> objects = new ArrayList<>();
+
+        List<Expression> expressions = arrayLiteral.expressionList();
+        for (Expression expression : expressions) {
+            objects.add(eval(expression, environment));
+        }
+
+        ArrayObject arrayObject = new ArrayObject(objects);
+        return arrayObject;
+    }
+
+    /* 对数组索引的求值, 比如
+     * let a = [1,2,3]; a[1] 要计算出这是2
+     * let [1,2,3][1], 也要计算出这是2
+     *
+     */
+    private static MonkeyObject evalIndexArrayLiteral(IndexExpression indexExpression, Environment environment){
+        MonkeyObject anObject = eval(indexExpression.target(), environment);
+
+        if (!(anObject instanceof ArrayObject)) {
+            throw new IllegalStateException(String.format(
+                    "object[type=%s] is not instance of ArrayObject", anObject.getClass().getName()));
+        }
+
+        ArrayObject arrayObject = (ArrayObject) anObject;
+        List<MonkeyObject> values = arrayObject.values();
+
+        MonkeyObject indexObject = eval(indexExpression.index(), environment);
+
+        if (!(indexObject instanceof IntegerObject)) {
+            throw new IllegalStateException(String.format(
+                    "indexObject[type=%s] is not instance of IntegerObject", indexObject.getClass().getName()));
+        }
+
+        IntegerObject integerObject = (IntegerObject) indexObject;
+        if (integerObject.value() >= values.size() || integerObject.value() < 0) {
+            return NullObject.NULL;
+        }
+
+        MonkeyObject result = arrayObject.values().get((int)(integerObject.value()));
+        return result;
     }
 }
 

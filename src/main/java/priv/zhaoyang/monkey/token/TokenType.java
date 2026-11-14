@@ -30,6 +30,8 @@ public enum TokenType {
     RPAREN(")"),
     LBRACE("{"),
     RBRACE("}"),
+    LBRACKETS("["),
+    RBRACKETS("]"),
 
     /* 关键字 */
     FUNCTION("FUNCTION"),

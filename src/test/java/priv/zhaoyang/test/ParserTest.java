@@ -866,4 +866,134 @@ public class ParserTest {
         StringLiteral stringLiteral = (StringLiteral) expression;
         Assert.assertEquals(stringLiteral.value(), expectedValue);
     }
+
+    @DataProvider(name = "testParseArrayLiteralDataProvider")
+    public Object[][] testParseArrayLiteralDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{
+                        "let arr = [1,2,3];",
+                        Arrays.asList(
+                                new IntegerLiteral(new Token(TokenType.INT, "1")).putValue(1),
+                                new IntegerLiteral(new Token(TokenType.INT, "2")).putValue(2),
+                                new IntegerLiteral(new Token(TokenType.INT, "3")).putValue(3)
+                        )
+                },
+                new Object[]{
+                        "let a = [[1,2],[3,4],[5,6]];",
+                        Arrays.asList(
+                                new ArrayLiteral(new Token(TokenType.LBRACKETS, "["))
+                                        .putExpressionList(
+                                                Arrays.asList(
+                                                        new IntegerLiteral(new Token(TokenType.INT, "1")).putValue(1),
+                                                        new IntegerLiteral(new Token(TokenType.INT, "2")).putValue(2)
+                                                )
+                                        ),
+                                new ArrayLiteral(new Token(TokenType.LBRACKETS, "["))
+                                        .putExpressionList(
+                                                Arrays.asList(
+                                                        new IntegerLiteral(new Token(TokenType.INT, "3")).putValue(3),
+                                                        new IntegerLiteral(new Token(TokenType.INT, "4")).putValue(4)
+                                                )
+                                        ),
+                                new ArrayLiteral(new Token(TokenType.LBRACKETS, "["))
+                                        .putExpressionList(
+                                                Arrays.asList(
+                                                        new IntegerLiteral(new Token(TokenType.INT, "5")).putValue(5),
+                                                        new IntegerLiteral(new Token(TokenType.INT, "6")).putValue(6)
+                                                )
+                                        )
+                        )
+                },
+                new Object[]{
+                        "let a = [];",
+                        Arrays.asList()
+                },
+        };
+    }
+
+    @Test(dataProvider = "testParseArrayLiteralDataProvider")
+    public void testParseArrayLiteral(String input, List<Expression> expectedExpressions){
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+
+        List<Statement> statements = program.statements();
+        Assert.assertEquals(statements.size(), 1);
+
+        Statement statement = statements.get(0);
+        if (!(statement instanceof LetStatement)){
+            Assert.fail(String.format("statement(type=%s) is not instance of LetStatement.", statement.getClass().getName()));
+        }
+        LetStatement letStatement = (LetStatement) statement;
+        Expression expression = letStatement.expression();
+
+        if (!(expression instanceof ArrayLiteral)){
+            Assert.fail(String.format("expression(type=%s) is not instance of ArrayLiteral.", expression.getClass().getName()));
+        }
+        ArrayLiteral arrayLiteral = (ArrayLiteral) expression;
+        List<Expression> expressionList = arrayLiteral.expressionList();
+        Assert.assertEquals(expressionList.size(), expectedExpressions.size());
+
+        for(int i = 0; i < expressionList.size(); i++){
+            Expression actual = expressionList.get(i);
+            Expression expected = expectedExpressions.get(i);
+
+            if (actual instanceof IntegerLiteral) {
+
+                if (!(expected instanceof IntegerLiteral)) {
+                    Assert.fail(String.format("actual type is %s, expected type is %s",
+                            actual.getClass().getName(), expected.getClass().getName()));
+                }
+                IntegerLiteral integerLiteralActual = (IntegerLiteral) actual;
+                IntegerLiteral integerLiteralExpected = (IntegerLiteral) expected;
+                Assert.assertEquals(integerLiteralActual.value(), integerLiteralExpected.value());
+
+            } else if (actual instanceof ArrayLiteral) {
+
+                if (!(actual instanceof ArrayLiteral)) {
+                    Assert.fail(String.format("actual type is %s, expected type is %s",
+                            actual.getClass().getName(), expected.getClass().getName()));
+                }
+                ArrayLiteral actualArrayLiteral = (ArrayLiteral) actual;
+                ArrayLiteral expectedArrayLiteral = (ArrayLiteral) expected;
+                List<Expression> actualSubExpressions = actualArrayLiteral.expressionList();
+                List<Expression> expectedSubExpressions = expectedArrayLiteral.expressionList();
+                Assert.assertEquals(actualSubExpressions.size(), expectedSubExpressions.size());
+
+                for (int j = 0; j < actualSubExpressions.size(); j++){
+                    Expression actualSubExpr = actualSubExpressions.get(j);
+                    Expression expectedSubExpr = expectedSubExpressions.get(j);
+                    Assert.assertEquals(actualSubExpr.getClass(), expectedSubExpr.getClass());
+
+                    if (actualSubExpr instanceof IntegerLiteral) {
+                        Assert.assertEquals(
+                                ((IntegerLiteral)(actualSubExpr)).value(),
+                                ((IntegerLiteral)(expectedSubExpr)).value()
+                        );
+                    }
+                }
+
+            } else {
+                Assert.fail("Invalid actual type: " + actual.getClass().getName());
+            }
+        }
+    }
+
+    @Test
+    public void testParsingIndexExpression(){
+        String input = "myArray[1 + 1];";
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        ExpressionStatement statement = (ExpressionStatement) program.statements().get(0);
+        Expression expression = statement.expression();
+        Assert.assertTrue(expression instanceof IndexExpression, "expression is not IndexExpression");
+        IndexExpression indexExpression = (IndexExpression) expression;
+        testIdentifier(indexExpression.target(), "myArray");
+        Assert.assertTrue(indexExpression.index() instanceof InfixExpression, "index is not InfixExpression");
+        InfixExpression index = (InfixExpression) indexExpression.index();
+        Assert.assertEquals(index.operator(), "+");
+    }
 }

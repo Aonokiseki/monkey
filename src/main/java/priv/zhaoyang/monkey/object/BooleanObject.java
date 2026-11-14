@@ -25,4 +25,9 @@ public enum BooleanObject implements MonkeyObject {
     public String inspect() {
         return String.valueOf(value);
     }
+
+    @Override
+    public String toString(){
+        return String.valueOf(value);
+    }
 }

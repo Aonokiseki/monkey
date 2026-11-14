@@ -198,4 +198,72 @@ public class TokenTest {
         Assert.assertEquals(actual.literal, expected.literal);
         Assert.assertEquals(actual.type, expected.type);
     }
+
+    @Test
+    public void testArrayLiteral(){
+        String input = "let a = [[1,2],[2,3],[3,4]];";
+        Token[] expectedTokens = new Token[]{
+                new Token(TokenType.LET, "let"),
+                new Token(TokenType.IDENT, "a"),
+                new Token(TokenType.ASSIGN, "="),
+                new Token(TokenType.LBRACKETS, "["),
+                new Token(TokenType.LBRACKETS, "["),
+                new Token(TokenType.INT, "1"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.INT, "2"),
+                new Token(TokenType.RBRACKETS, "]"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.LBRACKETS, "["),
+                new Token(TokenType.INT, "2"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.INT, "3"),
+                new Token(TokenType.RBRACKETS, "]"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.LBRACKETS, "["),
+                new Token(TokenType.INT, "3"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.INT, "4"),
+                new Token(TokenType.RBRACKETS, "]"),
+                new Token(TokenType.RBRACKETS, "]"),
+                new Token(TokenType.SEMICOLON, ";"),
+        };
+
+        Lexer lexer = new Lexer(input);
+        for (Token expected : expectedTokens) {
+            Token actual = lexer.nextToken();
+            Assert.assertEquals(actual.literal, expected.literal);
+            Assert.assertEquals(actual.type, expected.type);
+        }
+    }
+
+    @DataProvider(name = "testArrayTokensDataProvider")
+    public Object[][] testArrayTokensDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{"[]", new Token[]{
+                        new Token(TokenType.LBRACKETS, "["),
+                        new Token(TokenType.RBRACKETS, "]"),
+                        new Token(TokenType.EOF, ""),
+                }},
+                new Object[]{"[1, 2, 3]", new Token[]{
+                        new Token(TokenType.LBRACKETS, "["),
+                        new Token(TokenType.INT, "1"),
+                        new Token(TokenType.COMMA, ","),
+                        new Token(TokenType.INT, "2"),
+                        new Token(TokenType.COMMA, ","),
+                        new Token(TokenType.INT, "3"),
+                        new Token(TokenType.RBRACKETS, "]"),
+                        new Token(TokenType.EOF, ""),
+                }},
+        };
+    }
+
+    @Test(dataProvider = "testArrayTokensDataProvider")
+    public void testArrayTokens(String input, Token[] expectedTokens){
+        Lexer lexer = new Lexer(input);
+        for (Token expected : expectedTokens) {
+            Token actual = lexer.nextToken();
+            Assert.assertEquals(actual.literal, expected.literal);
+            Assert.assertEquals(actual.type, expected.type);
+        }
+    }
 }
