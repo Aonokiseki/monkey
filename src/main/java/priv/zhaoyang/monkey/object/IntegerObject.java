@@ -1,6 +1,8 @@
 package priv.zhaoyang.monkey.object;
 
-public class IntegerObject implements MonkeyObject {
+import java.util.Objects;
+
+public class IntegerObject implements MonkeyObject, Hashable {
 
     private final long value;
 
@@ -25,5 +27,20 @@ public class IntegerObject implements MonkeyObject {
     @Override
     public String toString(){
         return String.valueOf(value);
+    }
+
+    @Override
+    public int hashCode(){
+        return Objects.hash(value);
+    }
+
+    @Override
+    public boolean equals(Object object){
+        if (object == this)
+            return true;
+        if (!(object instanceof IntegerObject))
+            return false;
+        IntegerObject another = (IntegerObject) object;
+        return this.value == another.value;
     }
 }

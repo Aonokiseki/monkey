@@ -996,4 +996,32 @@ public class ParserTest {
         InfixExpression index = (InfixExpression) indexExpression.index();
         Assert.assertEquals(index.operator(), "+");
     }
+
+    @Test
+    public void testParsingMapLiteral(){
+        String input = "{\"name\": \"Rean\", \"age\": 22};";
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        ExpressionStatement statement = (ExpressionStatement) program.statements().get(0);
+        Expression expression = statement.expression();
+        Assert.assertTrue(expression instanceof MapLiteral, "expression is not MapLiteral");
+        MapLiteral mapLiteral = (MapLiteral) expression;
+        Assert.assertEquals(mapLiteral.map().size(), 2);
+    }
+
+    @Test
+    public void testParsingEmptyMapLiteral(){
+        String input = "let a = {};";
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        checkParserErrors(parser);
+        LetStatement statement = (LetStatement) program.statements().get(0);
+        Expression expression = statement.expression();
+        Assert.assertTrue(expression instanceof MapLiteral, "expression is not MapLiteral");
+        MapLiteral mapLiteral = (MapLiteral) expression;
+        Assert.assertEquals(mapLiteral.map().size(), 0);
+    }
 }

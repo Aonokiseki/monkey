@@ -266,4 +266,40 @@ public class TokenTest {
             Assert.assertEquals(actual.type, expected.type);
         }
     }
+
+    @Test
+    public void testMapLexer(){
+        String input = "let dict = {\"name\": \"Rean\", \"age\": 22, \"isMale\", true}; return dict[\"age\"];";
+        Token[] expectedTokens = new Token[]{
+                new Token(TokenType.LET, "let"),
+                new Token(TokenType.IDENT, "dict"),
+                new Token(TokenType.ASSIGN, "="),
+                new Token(TokenType.LBRACE, "{"),
+                new Token(TokenType.STRING, "name"),
+                new Token(TokenType.COLON, ":"),
+                new Token(TokenType.STRING, "Rean"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.STRING, "age"),
+                new Token(TokenType.COLON, ":"),
+                new Token(TokenType.INT, "22"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.STRING, "isMale"),
+                new Token(TokenType.COMMA, ","),
+                new Token(TokenType.TRUE, "true"),
+                new Token(TokenType.RBRACE, "}"),
+                new Token(TokenType.SEMICOLON, ";"),
+                new Token(TokenType.RETURN, "return"),
+                new Token(TokenType.IDENT, "dict"),
+                new Token(TokenType.LBRACKETS, "["),
+                new Token(TokenType.STRING, "age"),
+                new Token(TokenType.RBRACKETS, "]"),
+                new Token(TokenType.SEMICOLON, ";"),
+        };
+        Lexer lexer = new Lexer(input);
+        for (Token expected : expectedTokens) {
+            Token actual = lexer.nextToken();
+            Assert.assertEquals(actual.literal, expected.literal);
+            Assert.assertEquals(actual.type, expected.type);
+        }
+    }
 }

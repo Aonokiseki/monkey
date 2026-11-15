@@ -5,7 +5,9 @@ import priv.zhaoyang.monkey.object.*;
 import priv.zhaoyang.monkey.token.TokenType;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /* 求值, 目标:
  * 1.IntegerLiteral求值
@@ -19,6 +21,7 @@ import java.util.List;
  * 9.while循环表达式求值
  * 10.字符串拼接
  * 11.数组定义和索引求值
+ * 12.map的定义和索引求值
  *  */
 public class Evaluator {
 
@@ -124,7 +127,12 @@ public class Evaluator {
         }
 
         if (node instanceof IndexExpression) {
-            return evalIndexArrayLiteral((IndexExpression) node, environment);
+            /* 要考虑这是map还是list */
+            return evalIndexExpression((IndexExpression) node, environment);
+        }
+
+        if (node instanceof MapLiteral) {
+            return evalMapLiteral((MapLiteral) node, environment);
         }
 
 
@@ -545,18 +553,11 @@ public class Evaluator {
      * let [1,2,3][1], 也要计算出这是2
      *
      */
-    private static MonkeyObject evalIndexArrayLiteral(IndexExpression indexExpression, Environment environment){
-        MonkeyObject anObject = eval(indexExpression.target(), environment);
+    private static MonkeyObject evalIndexArrayLiteral(ArrayObject arrayObject, Expression index, Environment environment){
 
-        if (!(anObject instanceof ArrayObject)) {
-            throw new IllegalStateException(String.format(
-                    "object[type=%s] is not instance of ArrayObject", anObject.getClass().getName()));
-        }
-
-        ArrayObject arrayObject = (ArrayObject) anObject;
         List<MonkeyObject> values = arrayObject.values();
 
-        MonkeyObject indexObject = eval(indexExpression.index(), environment);
+        MonkeyObject indexObject = eval(index, environment);
 
         if (!(indexObject instanceof IntegerObject)) {
             throw new IllegalStateException(String.format(
@@ -570,6 +571,59 @@ public class Evaluator {
 
         MonkeyObject result = arrayObject.values().get((int)(integerObject.value()));
         return result;
+    }
+
+    /* 对"定义map"的求值 */
+    private static MonkeyObject evalMapLiteral(MapLiteral mapLiteral, Environment environment){
+        Map<Expression, Expression> content = mapLiteral.map();
+
+        Map<MonkeyObject, MonkeyObject> objectMap = new HashMap<>();
+        for(Map.Entry<Expression, Expression> e : content.entrySet()){
+
+            MonkeyObject evaluatedKey = eval(e.getKey(), environment);
+            MonkeyObject evaluatedValue = eval(e.getValue(), environment);
+            objectMap.put(evaluatedKey, evaluatedValue);
+        }
+
+        return new MapObject(objectMap);
+    }
+
+    /* "解析map"的求值, 例如 map["key1"] */
+    private static MonkeyObject evalIndexMapLiteral(MapObject mapObject, Expression index, Environment environment){
+
+        Map<MonkeyObject, MonkeyObject> content = mapObject.map();
+
+        MonkeyObject indexObject = eval(index, environment);
+
+        /* 我知道了, 要是不实现hashcode和equals, 就得在这里展开: 先判断MonkeyObject的实际类型, 转型后在对比value
+         * 对上了再用当前这个MonkeyObject去获取代表value的MonkeyObject
+         * 可现在实现了, 那就无需考虑 */
+
+        /* 漏了一处, 判断类型是否可散列 */
+        if (!(indexObject instanceof Hashable)){
+            throw new IllegalStateException(String.format(
+                    "indexObject[type=%s] is not instance of Hashable.", indexObject.getClass().getName()));
+        }
+
+        return content.getOrDefault(indexObject, NullObject.NULL);
+    }
+
+    /* 初步解析索引表达式, 根据索引目标的不同分发给不同处理方法 */
+    private static MonkeyObject evalIndexExpression(IndexExpression indexExpression, Environment environment){
+        Expression target = indexExpression.target();
+
+        /* 直接判断字面量, 遇到Identifier铁定失败, 不知道原因, 那这样, 先对target求值, 根据求值结果的类型再分发 */
+        MonkeyObject evaluatedTarget = eval(target, environment);
+
+        if (evaluatedTarget instanceof ArrayObject) {
+            return evalIndexArrayLiteral((ArrayObject) evaluatedTarget, indexExpression.index(), environment);
+        }
+        if (evaluatedTarget instanceof MapObject) {
+            return evalIndexMapLiteral((MapObject) evaluatedTarget, indexExpression.index(), environment);
+        }
+
+        throw new IllegalStateException(String.format(
+                "Invalid target type[%s] in indexExpression", evaluatedTarget.getClass().getName()));
     }
 }
 

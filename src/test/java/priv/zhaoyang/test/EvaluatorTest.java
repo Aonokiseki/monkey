@@ -14,6 +14,7 @@ import priv.zhaoyang.monkey.parser.Parser;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class EvaluatorTest {
 
@@ -506,6 +507,28 @@ public class EvaluatorTest {
             }
         }
 
+        else if (actual instanceof MapObject) {
+            if (!(expected instanceof MapObject)){
+                Assert.fail("expected is not instance of MapObject");
+            }
+            MapObject actualMap = (MapObject) actual;
+            MapObject expectedMap = (MapObject) expected;
+            Map<MonkeyObject, MonkeyObject> am = actualMap.map();
+            Map<MonkeyObject, MonkeyObject> em = expectedMap.map();
+            Assert.assertEquals(am.size(), em.size());
+            for (Map.Entry<MonkeyObject, MonkeyObject> e : am.entrySet()){
+                MonkeyObject expectedValue = null;
+                for (Map.Entry<MonkeyObject, MonkeyObject> ee : em.entrySet()){
+                    if (ee.getKey().inspect().equals(e.getKey().inspect())){
+                        expectedValue = ee.getValue();
+                        break;
+                    }
+                }
+                Assert.assertNotNull(expectedValue, "key not found in expected map: " + e.getKey().inspect());
+                compare(e.getValue(), expectedValue);
+            }
+        }
+
         else {
             /* 如果遇到FunctionObject也应该报错 */
 
@@ -711,6 +734,17 @@ public class EvaluatorTest {
                 /* 嵌套索引 */
                 new Object[]{"[[1, 2], [3, 4]][1][0]", new IntegerObject(3)},
                 new Object[]{"[[1, 2], [3, 4]][1][1]", new IntegerObject(4)},
+                /* 原书 TestHashIndexExpressions */
+                new Object[]{"{\"foo\": 5}[\"foo\"]", new IntegerObject(5)},
+                new Object[]{"{\"foo\": 5}[\"bar\"]", NullObject.NULL},
+                new Object[]{"let key = \"foo\"; {\"foo\": 5}[key]", new IntegerObject(5)},
+                new Object[]{"{}[\"foo\"]", NullObject.NULL},
+                new Object[]{"{5: 5}[5]", new IntegerObject(5)},
+                new Object[]{"{true: 5}[true]", new IntegerObject(5)},
+                new Object[]{"{false: 5}[false]", new IntegerObject(5)},
+                /* 变量 map 索引 */
+                new Object[]{"let m = {\"a\": 1, \"b\": 2}; m[\"a\"];", new IntegerObject(1)},
+                new Object[]{"{\"foo\": 5}[\"foo\"] + {\"bar\": 6}[\"bar\"]", new IntegerObject(11)},
         };
     }
 
@@ -718,6 +752,55 @@ public class EvaluatorTest {
     public void testEvalIndexExpression(String input, MonkeyObject expected){
         Environment environment = new Environment(null);
         MonkeyObject actual = testProgram(input, environment);
+        compare(actual, expected);
+    }
+
+    @DataProvider(name = "testEvalMapObjectDataProvider")
+    public Object[][] testEvalMapObjectDataProvider(Method method){
+        return new Object[][]{
+                new Object[]{
+                        "let dict = {\"name\": \"Rean\", \"age\": 22, \"isMale\": true, true : true, \"attributes\":[21, 22, 23]};",
+                        new MapObject(Map.of(
+                                new StringObject("name"), new StringObject("Rean"),
+                                new StringObject("age"), new IntegerObject(22),
+                                new StringObject("isMale"), BooleanObject.TRUE,
+                                BooleanObject.TRUE, BooleanObject.TRUE,
+                                new StringObject("attributes"), new ArrayObject(Arrays.asList(
+                                        new IntegerObject(21),new IntegerObject(22), new IntegerObject(23)
+                                ))
+                        ))
+                },
+                new Object[]{
+                        "{\"one\": 1, \"two\": 2}",
+                        new MapObject(Map.of(
+                                new StringObject("one"), new IntegerObject(1),
+                                new StringObject("two"), new IntegerObject(2)
+                        ))
+                },
+                new Object[]{
+                        "{1: \"one\", true: \"yes\"}",
+                        new MapObject(Map.of(
+                                new IntegerObject(1), new StringObject("one"),
+                                BooleanObject.TRUE, new StringObject("yes")
+                        ))
+                },
+                new Object[]{
+                        "let a = {};",
+                        new MapObject(Map.of())
+                },
+                new Object[]{
+                        "{\"one\": 10 - 9, \"two\": 1 + 1}",
+                        new MapObject(Map.of(
+                                new StringObject("one"), new IntegerObject(1),
+                                new StringObject("two"), new IntegerObject(2)
+                        ))
+                },
+        };
+    }
+
+    @Test(dataProvider = "testEvalMapObjectDataProvider")
+    public void testEvalMapObject(String input, MonkeyObject expected){
+        MonkeyObject actual = testProgram(input);
         compare(actual, expected);
     }
 }

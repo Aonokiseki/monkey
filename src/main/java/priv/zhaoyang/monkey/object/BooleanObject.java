@@ -1,6 +1,6 @@
 package priv.zhaoyang.monkey.object;
 
-public enum BooleanObject implements MonkeyObject {
+public enum BooleanObject implements MonkeyObject, Hashable/* 布尔值真的有必要做散列么, new HashMap<Boolean, String>()??? */{
 
     TRUE(true),
     FALSE(false)

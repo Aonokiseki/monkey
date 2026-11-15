@@ -113,6 +113,9 @@ public class Lexer {
             case ']':
                 return new Token(TokenType.RBRACKETS, "]");
 
+            case ':':
+                return new Token(TokenType.COLON, ":");
+
             case '"':
                 String stringLiteral = readString();
                 return new Token(TokenType.STRING, stringLiteral);

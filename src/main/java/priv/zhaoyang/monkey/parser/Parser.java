@@ -29,6 +29,8 @@ package priv.zhaoyang.monkey.parser;
       4.12: 调用表达式
       4.13: 定义数组
       4.14: 数组索引
+      4.15: 定义map
+      4.16: map索引
  * */
 
 
@@ -71,6 +73,7 @@ public class Parser {
         registerPrefix(TokenType.WHILE, this::parseWhileExpression);
         registerPrefix(TokenType.STRING, this::parseStringLiteral);
         registerPrefix(TokenType.LBRACKETS, this::parseArrayLiteral);
+        registerPrefix(TokenType.LBRACE, this::parseMapLiteral);
 
         /* 中缀注册 */
         registerInfix(TokenType.PLUS, this::parseInfixExpression);
@@ -772,5 +775,54 @@ public class Parser {
         }
 
         return indexExpression;
+    }
+
+    /* 解析map的定义, 遇到大括号, 进入前缀表达式
+     *  let dict = {"name": "Rean", "age": 22, "isMale", true};
+     *  */
+    private MapLiteral parseMapLiteral(){
+        MapLiteral mapLiteral = new MapLiteral(current);
+
+        /* 空 map 的情况（先于 moveNext，看 next 是不是 }） */
+        if (next.type == TokenType.RBRACE){
+            moveNext();
+            return mapLiteral.putMap(Collections.emptyMap());
+        }
+
+        /* 跳过大括号 */
+        moveNext();
+
+        Map<Expression, Expression> map = new HashMap<>();
+
+        /* 第一个键值对单独处理 */
+        Expression firstKey = parseExpression(Precedence.LOWEST);
+        if(!expectPeek(TokenType.COLON)) {
+            return null;
+        }
+        moveNext();
+        Expression firstValue = parseExpression(Precedence.LOWEST);
+        map.put(firstKey, firstValue);
+
+        /* 后续统一放循环 */
+        while (next.type == TokenType.COMMA) {
+            moveNext();
+            moveNext();
+
+            Expression key = parseExpression(Precedence.LOWEST);
+            if(!expectPeek(TokenType.COLON)) {
+                return null;
+            }
+            moveNext();
+            Expression value = parseExpression(Precedence.LOWEST);
+            map.put(key, value);
+        }
+
+        mapLiteral.putMap(map);
+
+        if (!expectPeek(TokenType.RBRACE)){
+            return null;
+        }
+
+        return mapLiteral;
     }
 }

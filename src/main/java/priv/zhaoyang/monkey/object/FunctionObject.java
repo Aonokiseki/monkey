@@ -3,6 +3,8 @@ package priv.zhaoyang.monkey.object;
 import priv.zhaoyang.monkey.ast.FunctionExpression;
 import priv.zhaoyang.monkey.eval.Environment;
 
+import java.util.Objects;
+
 public class FunctionObject implements MonkeyObject{
 
     private final FunctionExpression functionExpression;
