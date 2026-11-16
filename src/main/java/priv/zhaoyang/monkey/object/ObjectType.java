@@ -12,6 +12,7 @@ public enum ObjectType {
     ARRAY("ARRAY"),
     MAP("MAP"),
     FUNCTION("FUNCTION"),
+    BUILTIN("BUILTIN")
     ;
 
 

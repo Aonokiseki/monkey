@@ -22,6 +22,7 @@ import java.util.Map;
  * 10.字符串拼接
  * 11.数组定义和索引求值
  * 12.map的定义和索引求值
+ * 13.内置函数,字符串索引
  *  */
 public class Evaluator {
 
@@ -400,9 +401,16 @@ public class Evaluator {
 
     /* 啊我去, 漏了evalIdentifier了 */
     private static MonkeyObject evalIdentifier(Identifier identifier, Environment environment){
+
         if (environment.contains(identifier.value())){
             return environment.get(identifier.value(), NullObject.NULL);
         }
+
+        /* 需要加入内置函数支持, 判断identifier是不是内置函数 */
+        if (Builtin.contains(identifier.value())){
+            return Builtin.get(identifier.value());
+        }
+
         throw new IllegalStateException(String.format(
                 "Unknown identifier[type=%s, value=%s] in evalIdentifier()",
                 identifier.getClass().getName(), identifier.value()));
@@ -468,12 +476,23 @@ public class Evaluator {
      * 否则 !fn(...) 拿到的是 ReturnValue 而不是 Boolean。程序顶层解包过一次，函数边界是第二个解包点。 */
     private static MonkeyObject evalCallFunction(CallExpression callExpression, Environment environment){
         /* 在【调用方】环境里求值“被调用的函数表达式”，得到 FunctionObject */
-        MonkeyObject fo = eval(callExpression.function(), environment);
-        if (!(fo instanceof FunctionObject)){
-            throw new IllegalStateException(String.format(
-                    "fo[type=%s] in not instance of FunctionObject in evalCallFunction()", fo.getClass().getName()));
+        MonkeyObject maybeAFunctionObject = eval(callExpression.function(), environment);
+
+        /* 如果它是内置函数, 用内置函数处理 */
+        if (maybeAFunctionObject instanceof BuiltinFunction) {
+
+            List<MonkeyObject> builtinArguments = new ArrayList<>();
+            for(Expression argument : callExpression.arguments()){
+                builtinArguments.add(eval(argument, environment));
+            }
+            return ((BuiltinFunction) maybeAFunctionObject).process(builtinArguments);
         }
-        FunctionObject functionObject = (FunctionObject) fo;
+
+        if (!(maybeAFunctionObject instanceof FunctionObject)){
+            throw new IllegalStateException(String.format(
+                    "maybeAFunctionObject[type=%s] in not instance of FunctionObject in evalCallFunction()", maybeAFunctionObject.getClass().getName()));
+        }
+        FunctionObject functionObject = (FunctionObject) maybeAFunctionObject;
         List<Identifier> identifiers = functionObject.functionExpression().parameters();
 
         /* 局部变量表的 outer = 定义时环境（闭包靠它往外看）；实参稍后在调用方环境求值 */
@@ -622,8 +641,31 @@ public class Evaluator {
             return evalIndexMapLiteral((MapObject) evaluatedTarget, indexExpression.index(), environment);
         }
 
+        /* 补充内置函数的时候顺便补充了这里 */
+        if (evaluatedTarget instanceof StringObject){
+            return evalIndexStringLiteral((StringObject) evaluatedTarget, indexExpression.index(), environment);
+        }
+
         throw new IllegalStateException(String.format(
                 "Invalid target type[%s] in indexExpression", evaluatedTarget.getClass().getName()));
+    }
+
+    /* 字符串的索引表达式求值 */
+    private static MonkeyObject evalIndexStringLiteral(StringObject stringObject, Expression index, Environment environment){
+        String content = stringObject.value();
+
+        MonkeyObject indexObject = eval(index, environment);
+        if (!(indexObject instanceof IntegerObject)) {
+            throw new IllegalStateException(String.format(
+                    "indexObject[type=%s] is not instance of IntegerObject", indexObject.getClass().getName()));
+        }
+
+        IntegerObject integerObject = (IntegerObject) indexObject;
+        if (integerObject.value() >= content.length() || integerObject.value() < 0) {
+            return NullObject.NULL;
+        }
+        String resultContent = content.substring((int)integerObject.value(), (int)integerObject.value() + 1);
+        return new StringObject(resultContent);
     }
 }
 

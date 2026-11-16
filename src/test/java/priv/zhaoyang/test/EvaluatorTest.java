@@ -745,6 +745,13 @@ public class EvaluatorTest {
                 /* 变量 map 索引 */
                 new Object[]{"let m = {\"a\": 1, \"b\": 2}; m[\"a\"];", new IntegerObject(1)},
                 new Object[]{"{\"foo\": 5}[\"foo\"] + {\"bar\": 6}[\"bar\"]", new IntegerObject(11)},
+                /* 字符串索引 */
+                new Object[]{"\"abc\"[0]", new StringObject("a")},
+                new Object[]{"\"abc\"[1]", new StringObject("b")},
+                new Object[]{"\"abc\"[2]", new StringObject("c")},
+                new Object[]{"\"abc\"[3]", NullObject.NULL},
+                new Object[]{"\"abc\"[-1]", NullObject.NULL},
+                new Object[]{"let s = \"hello\"; s[1]", new StringObject("e")},
         };
     }
 
@@ -802,5 +809,101 @@ public class EvaluatorTest {
     public void testEvalMapObject(String input, MonkeyObject expected){
         MonkeyObject actual = testProgram(input);
         compare(actual, expected);
+    }
+
+    @DataProvider(name = "testEvalBuiltinFunctionDataProvider")
+    public Object[][] testEvalBuiltinFunction(Method method){
+        return new Object[][]{
+                new Object[]{
+                        "len([1,2,3])", new IntegerObject(3)},
+                new Object[]{
+                        "len(\"Monkey\")", new IntegerObject(6)},
+                new Object[]{
+                        "let dict={\"name\":\"monkey\", \"isLang\": true, \"edition\": 6, \"comment\": \"\"}; return len(dict);",
+                        new IntegerObject(4)},
+                new Object[]{
+                        "len(\"\")", new IntegerObject(0)},
+                new Object[]{
+                        "len([])", new IntegerObject(0)},
+                new Object[]{
+                        "len({})", new IntegerObject(0)},
+                new Object[]{
+                        "len(\"hello world\")", new IntegerObject(11)},
+                new Object[]{"first([3,2,1])", new IntegerObject(3)},
+                new Object[]{"last([3,2,1])", new IntegerObject(1)},
+                /* 原书 TestBuiltinFunctions - first/last/push */
+                new Object[]{"first([1, 2, 3])", new IntegerObject(1)},
+                new Object[]{"last([1, 2, 3])", new IntegerObject(3)},
+                new Object[]{"first([])", NullObject.NULL},
+                new Object[]{"last([])", NullObject.NULL},
+                new Object[]{"push([1, 2, 3], 4)", new ArrayObject(Arrays.asList(new IntegerObject(1), new IntegerObject(2), new IntegerObject(3), new IntegerObject(4)))},
+                new Object[]{"push([], 1)", new ArrayObject(Arrays.asList(new IntegerObject(1)))},
+                /* pop 是自扩展，返回被弹出的元素 */
+                new Object[]{"pop([1, 2, 3])", new IntegerObject(3)},
+                /* rest */
+                new Object[]{"rest([1, 2, 3])", new ArrayObject(Arrays.asList(new IntegerObject(2), new IntegerObject(3)))},
+                new Object[]{"rest([])", NullObject.NULL},
+                /* push/rest 不改变原数组（浅拷贝） */
+                new Object[]{"let a = [1,2,3]; rest(a); a", new ArrayObject(Arrays.asList(new IntegerObject(1), new IntegerObject(2), new IntegerObject(3)))},
+                new Object[]{"let a = [1,2,3]; push(a, 4); a", new ArrayObject(Arrays.asList(new IntegerObject(1), new IntegerObject(2), new IntegerObject(3)))},
+        };
+    }
+
+    @Test(dataProvider = "testEvalBuiltinFunctionDataProvider")
+    public void testEvalBuiltinFunction(String input, MonkeyObject expected){
+        MonkeyObject actual = testProgram(input);
+        compare(actual, expected);
+    }
+
+    @Test
+    public void testEvaluator(){
+        String input = "let fib = fn(n){ if (n == 0) {return 0;} if (n == 1) {return 1;} return fib(n-1) + fib(n-2); }; return fib(6)";
+        IntegerObject expected = new IntegerObject(8);
+        MonkeyObject actual = testProgram(input, new Environment(null));
+        compare(actual, expected);
+
+        String input2 =
+                "let fib = fn(n){ " +
+                    "if (n == 0) {return 0;} " +
+                    "if (n == 1) {return 1;} " +
+                    "let former = 0; let latter = 1; let result = 0; let i = 2; " +
+                    "while(i < n + 1) {" +
+                        "let result = former + latter;" +
+                        "let former = latter;" +
+                        "let latter = result;" +
+                        "let i = i + 1;"+
+                    "}" +
+                     "return result;"+
+                "};" +
+                "return  fib(7) - fib(6);";
+        MonkeyObject actual2 = testProgram(input2, new Environment(null));
+        compare(actual2, new IntegerObject(5));
+    }
+
+    /* 我去, 丢人了啊, 写个斐波那契函数还要先用java写一遍来检查monkey为什么是错的
+     * 这说明了一件事, 没有代码块容易让人犯傻 */
+    @Test
+    public void testFib(){
+        Assert.assertEquals(8, fib(6));
+    }
+
+    private int fib(int n){
+        if (n == 0) {
+            return 0;
+        }
+        if (n == 1) {
+            return 1;
+        }
+        int former = 0;
+        int latter = 1;
+        int result = 0;
+        int i = 2;
+        while (i < n + 1) {
+            result = former + latter;
+            former = latter;
+            latter = result;
+            i = i + 1;
+        }
+        return result;
     }
 }
