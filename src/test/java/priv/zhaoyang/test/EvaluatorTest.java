@@ -857,7 +857,13 @@ public class EvaluatorTest {
 
     @Test
     public void testEvaluator(){
-        String input = "let fib = fn(n){ if (n == 0) {return 0;} if (n == 1) {return 1;} return fib(n-1) + fib(n-2); }; return fib(6)";
+        String input =
+                "let fib = fn(n){ " +
+                        "if (n == 0) {return 0;} " +
+                        "if (n == 1) {return 1;} " +
+                        "return fib(n-1) + fib(n-2); " +
+                "}; " +
+                "return fib(6)";
         IntegerObject expected = new IntegerObject(8);
         MonkeyObject actual = testProgram(input, new Environment(null));
         compare(actual, expected);
@@ -880,8 +886,6 @@ public class EvaluatorTest {
         compare(actual2, new IntegerObject(5));
     }
 
-    /* 我去, 丢人了啊, 写个斐波那契函数还要先用java写一遍来检查monkey为什么是错的
-     * 这说明了一件事, 没有代码块容易让人犯傻 */
     @Test
     public void testFib(){
         Assert.assertEquals(8, fib(6));
